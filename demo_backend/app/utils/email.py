@@ -4,56 +4,52 @@ import string
 import aiosmtplib
 from email.message import EmailMessage
 
-# --- Configuration ---
+# --- Configuration Fetching ---
+# We fetch these from the .env file. 
+# If they are missing, we default to empty strings or safe defaults.
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER", "your-email@gmail.com")
-SMTP_PASS = os.getenv("SMTP_PASS", "your-app-password")
-
-# --- Helper Functions ---
+SMTP_USER = os.getenv("SMTP_USER")
+SMTP_PASS = os.getenv("SMTP_PASS")
 
 def generate_otp(length=6):
-    """Generates a random numeric OTP"""
+    """Generates a random 6-digit OTP."""
     return ''.join(random.choices(string.digits, k=length))
 
-async def send_verification_email(email: str, otp: str):
-    """Sends the OTP verification email via SMTP"""
-    msg = EmailMessage()
-    msg["From"] = SMTP_USER
-    msg["To"] = email
-    msg["Subject"] = "Your verification code"
-    msg.set_content(f"Use this code to finish logging in: {otp}")
-
+async def send_email(to_email: str, subject: str, body: str):
+    """Generic function to send an email."""
     if not SMTP_USER or not SMTP_PASS:
-        print(f"[MOCK EMAIL] To: {email}, OTP: {otp}")
+        print(f"⚠️ [EMAIL MOCK] To: {to_email} | Subject: {subject} | Body: {body}")
+        print("   (Email not sent because SMTP_USER or SMTP_PASS is missing in .env)")
         return
 
-    await aiosmtplib.send(
-        msg,
-        hostname=SMTP_HOST,
-        port=SMTP_PORT,
-        start_tls=True,
-        username=SMTP_USER,
-        password=SMTP_PASS,
-    )
+    msg = EmailMessage()
+    msg["From"] = SMTP_USER
+    msg["To"] = to_email
+    msg["Subject"] = subject
+    msg.set_content(body)
+
+    try:
+        await aiosmtplib.send(
+            msg,
+            hostname=SMTP_HOST,
+            port=SMTP_PORT,
+            start_tls=True,  # Required for Gmail on port 587
+            username=SMTP_USER,
+            password=SMTP_PASS,
+        )
+        print(f"✅ Email sent to {to_email}")
+    except Exception as e:
+        print(f"❌ Failed to send email: {e}")
+
+# --- Functions called by auth.py ---
+
+async def send_verification_email(email: str, otp: str):
+    subject = "Your Verification Code"
+    body = f"Your verification code for Jupiter AI is: {otp}"
+    await send_email(email, subject, body)
 
 async def send_password_reset_email(email: str, link: str):
-    """Sends the password reset link via SMTP"""
-    msg = EmailMessage()
-    msg["From"] = SMTP_USER
-    msg["To"] = email
-    msg["Subject"] = "Reset Your Password"
-    msg.set_content(f"Click the following link to reset your password: {link}")
-
-    if not SMTP_USER or not SMTP_PASS:
-        print(f"[MOCK EMAIL] To: {email}, Link: {link}")
-        return
-
-    await aiosmtplib.send(
-        msg,
-        hostname=SMTP_HOST,
-        port=SMTP_PORT,
-        start_tls=True,
-        username=SMTP_USER,
-        password=SMTP_PASS,
-    )
+    subject = "Reset Your Password"
+    body = f"Click the link to reset your password: {link}\n\nIf you did not request this, please ignore this email."
+    await send_email(email, subject, body)

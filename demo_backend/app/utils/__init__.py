@@ -1,5 +1,5 @@
-from . import security
+from . import email
 
-__all__ = ["security"]
+__all__ = ["email"]
 
 

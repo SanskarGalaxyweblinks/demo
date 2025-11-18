@@ -1,7 +1,10 @@
 from __future__ import annotations
 import os
 from functools import lru_cache
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field
+
+load_dotenv()
 
 class Settings(BaseModel):
     app_name: str = "Jupiter AI Backend"
