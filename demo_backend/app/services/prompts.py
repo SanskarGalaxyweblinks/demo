@@ -60,3 +60,66 @@ Return ONLY valid JSON with category and reasoning keys. No extra text.
 EMAIL CONTENT:
 "{email_body}"
 """
+
+# --- DOCUMENT PROMPT CONSTANTS (New) ---
+
+DOCUMENT_PROMPTS = {
+    "en": {
+        "instructions": """You are an expert invoice data extractor. Extract key information from this English invoice text and return ONLY a valid JSON object.
+
+CRITICAL: Identify the ISSUING company (sender) vs BILL-TO company (customer):
+- ISSUING COMPANY: The business that SENT the invoice (appears at top, has logo, contact details)
+- BILL-TO COMPANY: The customer receiving the invoice (appears after "Bill To:", "Ship To:", "Customer:")
+
+Required JSON format:""",
+        "json_instructions": "\nReturn ONLY the JSON object.\n\nInvoice text:\n",
+        "logo_instruction": '\nLogo text extracted: "{logo_text}"\nUse this logo text to help identify the ISSUING company (sender).',
+    },
+    "fr": {
+        "instructions": """Vous êtes un expert en extraction de données de factures. Extrayez les informations clés de ce texte de facture française et retournez UNIQUEMENT un objet JSON valide.
+
+CRITIQUE: Identifiez l'entreprise ÉMETTRICE vs l'entreprise FACTURÉE:
+- ENTREPRISE ÉMETTRICE: L'entreprise qui a ENVOYÉ la facture (apparaît en haut, a le logo, coordonnées)
+- ENTREPRISE FACTURÉE: Le client qui reçoit la facture (apparaît après "Facturé à:", "Client:", "Destinataire:")
+
+Format JSON requis:""",
+        "json_instructions": "\nRetournez UNIQUEMENT l'objet JSON.\n\nTexte de la facture:\n",
+        "logo_instruction": '\nTexte du logo extrait: "{logo_text}"\nUtilisez ce texte du logo pour identifier l\'entreprise ÉMETTRICE.',
+    },
+    "it": {
+        "instructions": """Sei un esperto nell'estrazione di dati dalle fatture. Estrai le informazioni chiave da questo testo di fattura italiana e restituisci SOLO un oggetto JSON valido.
+
+CRITICO: Identifica l'azienda EMITTENTE vs l'azienda FATTURATA:
+- AZIENDA EMITTENTE: L'azienda che ha INVIATO la fattura (appare in alto, ha il logo, dettagli di contatto)
+- AZIENDA FATTURATA: Il cliente che riceve la fattura (appare dopo "Fatturare a:", "Cliente:", "Destinatario:")
+
+Formato JSON richiesto:""",
+        "json_instructions": "\nRestituisci SOLO l'oggetto JSON.\n\nTesto della fattura:\n",
+        "logo_instruction": '\nTesto del logo estratto: "{logo_text}"\nUsa questo testo del logo per identificare l\'azienda EMITTENTE.',
+    },
+    "es": {
+        "instructions": """Eres un experto en extracción de datos de facturas. Extrae la información clave de este texto de factura española y devuelve SOLO un objeto JSON válido.
+
+CRÍTICO: Identifica la empresa EMISORA vs la empresa FACTURADA:
+- EMPRESA EMISORA: La empresa que ENVIÓ la factura (aparece arriba, tiene logo, datos de contacto)
+- EMPRESA FACTURADA: El cliente que recibe la factura (aparece después de "Facturar a:", "Cliente:", "Destinatario:")
+
+Formato JSON requerido:""",
+        "json_instructions": "\nDevuelve SOLO el objeto JSON.\n\nTexto de la factura:\n",
+        "logo_instruction": '\nTexto del logo extraído: "{logo_text}"\nUsa este texto del logo para identificar la empresa EMISORA.',
+    },
+}
+
+DOCUMENT_JSON_SCHEMA = """
+{
+    "invoice_number": "exact invoice number found",
+    "issuing_company": "company that SENT/ISSUED the invoice (NOT bill-to)", 
+    "bill_to_company": "customer company receiving the invoice",
+    "invoice_date": "YYYY-MM-DD format",
+    "total_amount": "final total number only (float or int)",
+    "currency": "currency symbol or code",
+    "customer_po": "purchase order number if found (string or null)",
+    "confidence_score": "high/medium/low",
+    "language": "en"
+}
+"""
