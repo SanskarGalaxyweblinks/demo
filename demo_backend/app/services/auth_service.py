@@ -1,69 +1,58 @@
-from __future__ import annotations
-
-import secrets
-from datetime import datetime
+# demo_backend/app/services/auth_service.py
 from typing import Any
-
-from fastapi import HTTPException, status
-
-from ..utils import security
+from pydantic import EmailStr
 from . import database
+from ..utils.security import get_password_hash, verify_password, create_session_token
 
 
-def _serialize_user(row: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "id": row["id"],
-        "email": row["email"],
-        "full_name": row.get("full_name"),
-        "created_at": datetime.fromisoformat(row["created_at"]),
-    }
+class UserAlreadyExists(Exception):
+    """Custom exception for registration conflict."""
+    pass
 
 
-def register_user(email: str, password: str, full_name: str | None) -> dict[str, Any]:
-    existing = database.get_user_by_email(email)
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="An account with this email already exists.",
-        )
-    password_hash = security.hash_password(password)
-    user = database.create_user(email=email, full_name=full_name, password_hash=password_hash)
-    return _serialize_user(user)
+def register_user(email: EmailStr, password: str, full_name: str | None) -> dict[str, Any]:
+    """Register a new user, checking for existing email."""
+    if database.get_user_by_email(email):
+        raise UserAlreadyExists("User with this email already exists")
+
+    password_hash = get_password_hash(password)
+    user = database.create_user(email, full_name, password_hash)
+    return user
 
 
-def authenticate_user(email: str, password: str) -> dict[str, Any] | None:
+def authenticate_user(email: EmailStr, password: str) -> dict[str, Any] | None:
+    """Verify user credentials and return user data if successful."""
+    user = database.get_user_by_email(email)
+    if user and verify_password(password, user["password_hash"]):
+        return user
+    return None
+
+
+def google_login(email: EmailStr, full_name: str | None) -> dict[str, Any]:
+    """Handle login for Google authenticated users, auto-registering if needed."""
     user = database.get_user_by_email(email)
     if not user:
-        return None
-    if not security.verify_password(password, user["password_hash"]):
-        return None
-    return _serialize_user(user)
+        # Placeholder for password hash since it's required by database schema
+        user = database.create_user(email, full_name, "google_login_hash")
+    return user
 
 
 def create_session(user_id: int) -> str:
-    token = secrets.token_urlsafe(32)
-    database.create_session(user_id=user_id, token=token)
+    """Create a new session token for a user and store it in the database."""
+    token = create_session_token()
+    database.create_session(user_id, token)
     return token
 
 
-def get_user_by_token(token: str) -> dict[str, Any] | None:
-    session = database.get_session(token)
-    if not session:
-        return None
-    user = database.get_user_by_id(session["user_id"])
-    return _serialize_user(user) if user else None
-
-
 def revoke_session(token: str) -> None:
+    """Delete a session token from the database."""
     database.delete_session(token)
 
 
-def google_login(email: str, full_name: str | None) -> dict[str, Any]:
-    user = database.get_user_by_email(email)
-    if user:
-        return _serialize_user(user)
-    password_hash = security.hash_password(secrets.token_urlsafe(16))
-    user = database.create_user(email=email, full_name=full_name, password_hash=password_hash)
-    return _serialize_user(user)
-
-
+def get_session_user(token: str) -> dict[str, Any] | None:
+    """Validate a session token and return the associated user."""
+    session_data = database.get_session(token)
+    if not session_data:
+        return None
+    user = database.get_user_by_id(session_data["user_id"])
+    return user

@@ -1,25 +1,17 @@
-from __future__ import annotations
-
-import hashlib
-import hmac
+# demo_backend/app/utils/security.py
 import secrets
+# NOTE: In a production application, you should use a dedicated, strong hashing library
+# like 'passlib' with algorithms like bcrypt or Argon2 for password security.
+# This implementation is for structure completeness and mock functionality only.
 
-ALGORITHM = "sha256"
-ITERATIONS = 390000
+def get_password_hash(password: str) -> str:
+    """Mock function to simulate password hashing."""
+    return f"insecure_hash_{password}"
 
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Mock function to simulate password verification."""
+    return hashed_password == f"insecure_hash_{plain_password}"
 
-def hash_password(password: str) -> str:
-    salt = secrets.token_hex(16)
-    hashed = hashlib.pbkdf2_hmac(ALGORITHM, password.encode(), salt.encode(), ITERATIONS)
-    return f"{salt}${hashed.hex()}"
-
-
-def verify_password(password: str, stored_hash: str) -> bool:
-    try:
-        salt, hashed_value = stored_hash.split("$")
-    except ValueError:
-        return False
-    new_hash = hashlib.pbkdf2_hmac(ALGORITHM, password.encode(), salt.encode(), ITERATIONS)
-    return hmac.compare_digest(new_hash.hex(), hashed_value)
-
-
+def create_session_token(length: int = 32) -> str:
+    """Generates a secure, random hexadecimal string for a session token."""
+    return secrets.token_hex(length)
