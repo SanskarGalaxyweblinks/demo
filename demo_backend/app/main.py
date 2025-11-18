@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
+# Importing all router modules
 from .api.routes import auth, documents, emails, erp, health, responses
 from .services import database
 
@@ -26,9 +27,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- Registering Routes ---
+# Core System Routes
 app.include_router(health.router)
 app.include_router(auth.router)
-# ... include other routers ...
+
+# Feature Routes
+app.include_router(emails.router)
+app.include_router(documents.router)
+app.include_router(erp.router)
+app.include_router(responses.router)
 
 @app.get("/", tags=["root"])
 async def root():

@@ -1,67 +1,72 @@
-from __future__ import annotations
+# app/services/email_service.py
+import json
+import time
+import os
+from langchain_groq import ChatGroq
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
+from .prompts import EMAIL_INFERENCE_PROMPT, EMAIL_CLASSIFICATION_PROMPT, MANUAL_VS_AUTONO_PROMPT
 
-import re
-from typing import Any
+# Initialize LLM
+# Llama3-70b is recommended for this level of reasoning
+llm = ChatGroq(
+    temperature=0,
+    model_name="openai/gpt-oss-20b",
+    api_key=os.environ.get("GROQ_API_KEY") # Or access via settings.groq_api_key
+)
 
-KEYWORD_CATEGORIES = {
-    "Billing": ["invoice", "payment", "billing", "overdue", "statement"],
-    "Customer Support": ["issue", "support", "help", "problem", "bug", "error"],
-    "Sales": ["quote", "pricing", "purchase", "order", "discount"],
-    "Logistics": ["shipment", "delivery", "tracking", "warehouse"],
-}
+async def classify_email_chain(subject: str, body: str) -> dict:
+    start_time = time.time()
+    
+    # Combine Subject and Body for context
+    full_email_content = f"Subject: {subject}\n\nBody:\n{body}"
 
-PRIORITY_RULES = {
-    "High": ["urgent", "immediately", "asap", "critical"],
-    "Medium": ["soon", "follow up", "schedule"],
-}
+    # --- STEP 1: INFERENCE (Summarization) ---
+    inference_chain = (
+        ChatPromptTemplate.from_template(EMAIL_INFERENCE_PROMPT) 
+        | llm 
+        | StrOutputParser()
+    )
+    
+    summary = await inference_chain.ainvoke({"email_body": full_email_content})
 
-SENTIMENT_RULES = {
-    "Negative": ["unhappy", "disappointed", "frustrated"],
-    "Positive": ["thank", "great", "appreciate", "happy"],
-}
+    # --- STEP 2: BUSINESS CLASSIFICATION ---
+    classification_chain = (
+        ChatPromptTemplate.from_template(EMAIL_CLASSIFICATION_PROMPT)
+        | llm
+        | JsonOutputParser() # Ensures we get a dict back
+    )
 
+    initial_result = await classification_chain.ainvoke({
+        "email_body": full_email_content,
+        "email_inference": summary
+    })
 
-def classify_email(subject: str, body: str, user: dict[str, Any] | None) -> dict[str, Any]:
-    content = f"{subject} {body}".lower()
+    final_category = initial_result.get("category")
+    final_reasoning = initial_result.get("reasoning")
 
-    category = "General"
-    for name, keywords in KEYWORD_CATEGORIES.items():
-        if any(keyword in content for keyword in keywords):
-            category = name
-            break
+    # --- STEP 3: REFINEMENT (If Manual Review) ---
+    # Only run this if the first pass returned MANUAL_REVIEW
+    if final_category == "MANUAL_REVIEW":
+        refinement_chain = (
+            ChatPromptTemplate.from_template(MANUAL_VS_AUTONO_PROMPT)
+            | llm
+            | JsonOutputParser()
+        )
+        
+        refined_result = await refinement_chain.ainvoke({
+            "email_body": full_email_content
+        })
+        
+        # Update category and reasoning based on the deeper analysis
+        final_category = refined_result.get("category").upper() # Ensure uppercase
+        final_reasoning = f"{final_reasoning} -> Refined: {refined_result.get('reasoning')}"
 
-    priority = "Low"
-    for level, keywords in PRIORITY_RULES.items():
-        if any(keyword in content for keyword in keywords):
-            priority = level
-            break
-    sentiment = "Neutral"
-    for label, keywords in SENTIMENT_RULES.items():
-        if any(keyword in content for keyword in keywords):
-            sentiment = label
-            break
-
-    tags = set()
-    if user:
-        tags.add("authenticated")
-    if re.search(r"\bETA\b", content):
-        tags.add("timeline")
-    if "$" in content or "usd" in content:
-        tags.add("finance")
-
-    confidence = 0.65
-    if priority == "High":
-        confidence += 0.15
-    if sentiment != "Neutral":
-        confidence += 0.05
-    confidence = min(confidence, 0.98)
+    execution_time = time.time() - start_time
 
     return {
-        "category": category,
-        "priority": priority,
-        "sentiment": sentiment,
-        "confidence": round(confidence, 2),
-        "tags": sorted(tags),
+        "category": final_category,
+        "reasoning": final_reasoning,
+        "summary": summary.strip(),
+        "processing_time": round(execution_time, 2)
     }
-
-

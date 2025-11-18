@@ -9,3 +9,5 @@ passlib[bcrypt]>=1.7.4
 aiosmtplib>=3.0.1
 python-dotenv>=1.0.1
 greenlet>=3.0.0
+langchain-groq
+langchain-core
