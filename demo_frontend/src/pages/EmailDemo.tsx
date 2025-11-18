@@ -3,16 +3,26 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Mail, ArrowLeft, Sparkles } from "lucide-react";
+import { Mail, ArrowLeft, Sparkles, Clock, AlignLeft, BrainCircuit } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+
+// Define the response structure based on your backend model
+interface ClassificationResult {
+  category: string;
+  reasoning: string;
+  summary: string;
+  processing_time: number;
+}
 
 const EmailDemo = () => {
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<ClassificationResult | null>(null);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const { session } = useAuth(); // Get user session for auth token
 
   const handleRunModel = async () => {
     if (!subject || !body) {
@@ -25,20 +35,48 @@ const EmailDemo = () => {
     }
 
     setLoading(true);
-    // Simulate AI processing
-    setTimeout(() => {
-      setResult({
-        category: "Customer Support",
-        priority: "High",
-        sentiment: "Urgent",
-        confidence: 0.94
+    setResult(null);
+
+    try {
+      // Use environment variable or default to local backend
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+
+      const response = await fetch(`${API_BASE}/emails/classify`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          // Include the token if you decide to protect this route later
+          ...(session?.token ? { "Authorization": `Bearer ${session.token}` } : {})
+        },
+        body: JSON.stringify({
+          subject,
+          body
+        }),
       });
-      setLoading(false);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "Failed to classify email");
+      }
+
+      const data: ClassificationResult = await response.json();
+      setResult(data);
+
       toast({
         title: "Classification Complete",
-        description: "Email has been successfully classified",
+        description: `Processed in ${data.processing_time}s`,
       });
-    }, 2000);
+
+    } catch (error: any) {
+      console.error("API Error:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Could not connect to the classification service",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -58,13 +96,13 @@ const EmailDemo = () => {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-foreground">Email Classifier</h1>
-              <p className="text-muted-foreground">Intelligent email categorization powered by AI</p>
+              <p className="text-muted-foreground">Intelligent email categorization powered by LLMs</p>
             </div>
           </div>
 
           <div className="grid md:grid-cols-2 gap-6">
             {/* Input Section */}
-            <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+            <Card className="border-border/50 bg-card/80 backdrop-blur-sm h-fit">
               <CardHeader>
                 <CardTitle>Input Email</CardTitle>
                 <CardDescription>Enter the email details to classify</CardDescription>
@@ -85,44 +123,67 @@ const EmailDemo = () => {
                     value={body}
                     onChange={(e) => setBody(e.target.value)}
                     rows={10}
+                    className="min-h-[200px]"
                   />
                 </div>
                 <Button onClick={handleRunModel} disabled={loading} className="w-full" variant="hero">
                   {loading ? "Processing..." : "Run Classification"}
-                  <Sparkles className="w-4 h-4" />
+                  <Sparkles className="w-4 h-4 ml-2" />
                 </Button>
               </CardContent>
             </Card>
 
             {/* Results Section */}
-            <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+            <Card className="border-border/50 bg-card/80 backdrop-blur-sm h-fit">
               <CardHeader>
                 <CardTitle>Classification Results</CardTitle>
                 <CardDescription>AI-powered email analysis</CardDescription>
               </CardHeader>
               <CardContent>
                 {result ? (
-                  <div className="space-y-4">
-                    <div className="p-4 rounded-lg bg-muted/50">
-                      <p className="text-sm text-muted-foreground mb-1">Category</p>
-                      <p className="text-lg font-semibold text-foreground">{result.category}</p>
+                  <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    {/* Main Category */}
+                    <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
+                      <p className="text-sm text-muted-foreground mb-1 flex items-center gap-2">
+                        <BrainCircuit className="w-4 h-4" /> Predicted Category
+                      </p>
+                      <p className="text-2xl font-bold text-primary">{result.category}</p>
                     </div>
+
+                    {/* Summary */}
                     <div className="p-4 rounded-lg bg-muted/50">
-                      <p className="text-sm text-muted-foreground mb-1">Priority</p>
-                      <p className="text-lg font-semibold text-foreground">{result.priority}</p>
+                      <p className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
+                        <AlignLeft className="w-4 h-4" /> Content Summary
+                      </p>
+                      <p className="text-sm text-foreground leading-relaxed">
+                        {result.summary}
+                      </p>
                     </div>
+
+                    {/* Reasoning */}
                     <div className="p-4 rounded-lg bg-muted/50">
-                      <p className="text-sm text-muted-foreground mb-1">Sentiment</p>
-                      <p className="text-lg font-semibold text-foreground">{result.sentiment}</p>
+                      <p className="text-sm text-muted-foreground mb-2">AI Reasoning</p>
+                      <p className="text-sm text-foreground/80 italic border-l-2 border-primary/50 pl-3">
+                        "{result.reasoning}"
+                      </p>
                     </div>
-                    <div className="p-4 rounded-lg bg-muted/50">
-                      <p className="text-sm text-muted-foreground mb-1">Confidence Score</p>
-                      <p className="text-lg font-semibold text-foreground">{(result.confidence * 100).toFixed(0)}%</p>
+
+                    {/* Stats */}
+                    <div className="flex gap-4">
+                      <div className="p-3 rounded-lg bg-muted/50 flex-1">
+                        <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                          <Clock className="w-3 h-3" /> Processing Time
+                        </p>
+                        <p className="text-lg font-semibold text-foreground">
+                          {result.processing_time}s
+                        </p>
+                      </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="text-center py-12 text-muted-foreground">
-                    Run the model to see classification results
+                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground min-h-[300px]">
+                    <BrainCircuit className="w-12 h-12 mb-4 opacity-20" />
+                    <p>Run the model to see classification results</p>
                   </div>
                 )}
               </CardContent>
