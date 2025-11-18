@@ -1,0 +1,30 @@
+# Python / FastAPI backend ignores
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.coverage
+
+# Virtual environments
+.venv/
+env/
+venv/
+
+# Environment & secrets
+.env
+.env.*
+
+# SQLite or temporary data
+data/*.db
+data/*.sqlite
+
+# Logs
+*.log
+
+# IDE / tooling
+.DS_Store
+.idea/
+.vscode/
+
+
