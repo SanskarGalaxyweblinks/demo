@@ -1,5 +1,9 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { User, Session } from "@supabase/supabase-js";
+// Using local lightweight types instead of importing from supabase-js since
+// the project now uses a custom backend. Change these to more specific
+// types if you have a defined user/session shape.
+type User = any;
+type Session = any;
 import { supabase } from "@/integrations/supabase/client";
 
 interface AuthContextType {
