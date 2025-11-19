@@ -13,6 +13,10 @@ class User(Base):
     full_name = Column(String)
     organization_name = Column(String)
     
+    # Usage Tracking
+    document_classifier_count = Column(Integer, default=0)
+    email_classifier_count = Column(Integer, default=0)
+    
     email_verified = Column(Boolean, default=False)
     email_verification_token = Column(String, nullable=True)
     email_verification_token_expires = Column(DateTime, nullable=True)

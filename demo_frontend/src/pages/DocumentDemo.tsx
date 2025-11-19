@@ -75,6 +75,19 @@ const DocumentDemo = () => {
 
             if (!response.ok) {
                 const errorData = await response.json();
+
+
+                // Handle Usage Limit Specific Error
+                if (response.status === 403 && errorData.detail.includes("Usage limit exceeded")) {
+                    toast({
+                        title: "Limit Reached",
+                        description: errorData.detail,
+                        variant: "destructive",
+                    });
+                    return;
+                }
+                
+
                 throw new Error(errorData.detail || "Failed to analyze document");
             }
 
