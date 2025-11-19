@@ -37,7 +37,7 @@ const DocumentDemo = () => {
     const [result, setResult] = useState<DocumentAnalysisResponse | null>(null);
     const [loading, setLoading] = useState(false);
     const { toast } = useToast();
-    const { session } = useAuth(); // Get user session for auth token
+    const { token } = useAuth(); // Get user session for auth token
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -68,7 +68,7 @@ const DocumentDemo = () => {
                 method: "POST",
                 headers: {
                     // Include the auth token if available
-                    ...(session?.token ? { "Authorization": `Bearer ${session.token}` } : {})
+                    ...(token ? { "Authorization": `Bearer ${token}` } : {})
                 },
                 body: formData,
             });

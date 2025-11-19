@@ -1,67 +1,75 @@
-import { createContext, useContext, useEffect, useState } from "react";
-// Using local lightweight types instead of importing from supabase-js since
-// the project now uses a custom backend. Change these to more specific
-// types if you have a defined user/session shape.
-type User = any;
-type Session = any;
-import { supabase } from "@/integrations/supabase/client";
+// src/contexts/AuthContext.tsx
+import React, { createContext, useContext, useState, useEffect } from "react";
+
+// Shape of the user object returned by your backend
+interface User {
+  id: number;
+  email: string;
+  fullName?: string;
+  createdAt?: string;
+}
 
 interface AuthContextType {
   user: User | null;
-  session: Session | null;
+  token: string | null;
   loading: boolean;
-  // ADDED: Expose the signOut function
-  signOut: () => Promise<void>;
+  login: (token: string, user: User) => void;
+  logout: () => void;
 }
 
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  session: null,
-  loading: true,
-  // ADDED: Default implementation
-  signOut: async () => {},
-});
+const AuthContext = createContext<AuthContextType | null>(null);
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error("useAuth must be used within AuthProvider");
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 };
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // ADDED: Function to handle signing out
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-  };
-
   useEffect(() => {
-    // Set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
+    // Initialize auth state from localStorage on mount
+    const storedToken = localStorage.getItem("token");
+    const storedUser = localStorage.getItem("user");
+
+    if (storedToken) {
+      setToken(storedToken);
+    }
+
+    if (storedUser) {
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch (error) {
+        console.error("Failed to parse user data", error);
+        localStorage.removeItem("user");
       }
-    );
+    }
 
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    setLoading(false);
   }, []);
 
+  const login = (newToken: string, newUser: User) => {
+    setToken(newToken);
+    setUser(newUser);
+    localStorage.setItem("token", newToken);
+    localStorage.setItem("user", JSON.stringify(newUser));
+  };
+
+  const logout = () => {
+    setToken(null);
+    setUser(null);
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    // Optional: Redirect to auth page if needed, usually handled by ProtectedRoute
+  };
+
   return (
-    <AuthContext.Provider value={{ user, session, loading, signOut: handleSignOut }}>
+    <AuthContext.Provider value={{ user, token, loading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

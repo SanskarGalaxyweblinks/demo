@@ -22,7 +22,7 @@ const EmailDemo = () => {
   const [result, setResult] = useState<ClassificationResult | null>(null);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
-  const { session } = useAuth(); // Get user session for auth token
+  const { token } = useAuth();// Get user session for auth token
 
   const handleRunModel = async () => {
     if (!subject || !body) {
@@ -46,7 +46,7 @@ const EmailDemo = () => {
         headers: {
           "Content-Type": "application/json",
           // Include the token if you decide to protect this route later
-          ...(session?.token ? { "Authorization": `Bearer ${session.token}` } : {})
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
         },
         body: JSON.stringify({
           subject,

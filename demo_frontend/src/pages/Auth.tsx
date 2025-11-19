@@ -1,3 +1,4 @@
+// src/pages/Auth.tsx
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Brain, Mail, Lock, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext"; // Import useAuth
 
 const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
@@ -13,10 +15,10 @@ const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  // Add state for name if you want to support full registration
   const [fullName, setFullName] = useState(""); 
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const { login } = useAuth(); // Get login function
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,30 +39,26 @@ const Auth = () => {
       const data = await response.json();
 
       if (!response.ok) {
-        // HANDLE SIGNUP CONFLICT (User exists but not verified)
         if (response.status === 409) {
             toast.info("Please verify your email.");
             navigate("/verify-email", { state: { email } });
             return;
         }
-        
-        // HANDLE LOGIN UNVERIFIED (User correct pass but not verified)
         if (response.status === 403 && data.detail && data.detail.includes("Email not verified")) {
             toast.info("Verification code sent. Please verify your email.");
             navigate("/verify-email", { state: { email } });
             return;
         }
-
         throw new Error(data.detail || "Request failed");
       }
 
       // SUCCESS HANDLERS
       if (isLogin) {
-        localStorage.setItem("token", data.token);
-        // Ideally, you should also update your AuthContext here so the UI updates immediately
-        navigate("/dashboard");
+        // Use context login to update global state
+        login(data.token, data.user);
+        toast.success("Logged in successfully!");
+        navigate("/models");
       } else {
-        // Registration Success
         toast.success("Code sent! Check your email.");
         navigate("/verify-email", { state: { email } });
       }

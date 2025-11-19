@@ -1,3 +1,4 @@
+// src/pages/Models.tsx
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Brain, Mail, FileText, MessageSquare, Database, ArrowRight, LogOut } from "lucide-react";
@@ -6,8 +7,8 @@ import { useAuth } from "@/contexts/AuthContext";
 
 const Models = () => {
   const navigate = useNavigate();
-  // UPDATED: Import signOut from useAuth
-  const { user, signOut } = useAuth();
+  // UPDATED: Import logout instead of signOut
+  const { user, logout } = useAuth();
 
   const models = [
     {
@@ -52,16 +53,15 @@ const Models = () => {
     }
   };
 
-  // ADDED: Sign out logic
-  const handleSignOut = async () => {
-    await signOut();
+  // Updated logout logic
+  const handleSignOut = () => {
+    logout();
     navigate("/auth");
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted">
       <div className="container mx-auto px-6 py-12">
-        {/* ADDED: Sign Out button when user is logged in */}
         {user && (
           <div className="flex justify-end mb-4">
             <Button variant="outline" onClick={handleSignOut}>
