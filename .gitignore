@@ -1,0 +1,9 @@
+demo_backend/uvicorn.log
+demo_frontend/.env
+demo_frontend/node_modules/
+__pycache__/
+.env
+.venv/
+build/
+dist/
+venv/
