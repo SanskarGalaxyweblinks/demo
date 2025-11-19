@@ -13,7 +13,7 @@ class UserAlreadyExists(Exception):
     """Raised when trying to register an email that already exists."""
 
 
-async def _get_user_by_email(db: AsyncSession, email: str) -> Optional[User]:
+async def get_user_by_email(db: AsyncSession, email: str) -> Optional[User]:
     result = await db.execute(select(User).where(User.email == email.lower()))
     return result.scalar_one_or_none()
 
@@ -24,7 +24,7 @@ async def register_user(
     password: str,
     full_name: str | None,
 ) -> User:
-    existing = await _get_user_by_email(db, email)
+    existing = await get_user_by_email(db, email)
     if existing:
         raise UserAlreadyExists("User with this email already exists")
 
@@ -44,7 +44,7 @@ async def authenticate_user(
     email: EmailStr,
     password: str,
 ) -> Optional[User]:
-    user = await _get_user_by_email(db, email)
+    user = await get_user_by_email(db, email)
     if user and verify_password(password, user.hashed_password):
         return user
     return None
@@ -55,7 +55,7 @@ async def google_login(
     email: EmailStr,
     full_name: str | None,
 ) -> User:
-    user = await _get_user_by_email(db, email)
+    user = await get_user_by_email(db, email)
     if user:
         return user
 

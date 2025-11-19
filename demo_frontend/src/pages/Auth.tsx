@@ -65,7 +65,6 @@ const Auth = () => {
 
     } catch (error: any) {
       toast.error(error.message);
-    } finally {
       setIsLoading(false);
     }
   };
@@ -132,9 +131,21 @@ const Auth = () => {
               </div>
             </div>
 
-            <Button type="submit" variant="hero" size="lg" className="w-full">
-              <Sparkles className="w-4 h-4" />
-              {isLogin ? "Sign In" : "Create Account"}
+            <Button 
+              type="submit" 
+              className="w-full" 
+              disabled={isLoading} // Disable button while loading
+            >
+              {isLoading ? (
+                // Show this when loading
+                <div className="flex items-center gap-2">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  {isLogin ? "Signing in..." : "Creating Account..."}
+                </div>
+              ) : (
+                // Show this normally
+                isLogin ? "Sign In" : "Sign Up"
+              )}
             </Button>
 
             <p className="text-center text-sm text-muted-foreground">
