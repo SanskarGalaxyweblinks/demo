@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+// Correcting imports by using simple relative paths to fix persistent resolution errors
 import { AuthProvider } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import Index from "./pages/Index";
@@ -15,6 +16,7 @@ import DocumentDemo from "./pages/DocumentDemo";
 import TamperDetection from "./pages/TamperDetection";
 import Instructions from "./pages/Instructions";
 import NotFound from "./pages/NotFound";
+import VerifyEmail from "./pages/VerifyEmail"; 
 
 const queryClient = new QueryClient();
 
@@ -32,6 +34,10 @@ const App = () => (
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/demo" element={<Demo />} />
             <Route path="/instructions" element={<Instructions />} />
+            
+            {/* Route for email verification to fix the 404 after registration */}
+            <Route path="/verify-email" element={<VerifyEmail />} />
+
             <Route
               path="/demo/email"
               element={
