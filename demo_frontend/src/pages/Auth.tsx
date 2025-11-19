@@ -37,23 +37,31 @@ const Auth = () => {
       const data = await response.json();
 
       if (!response.ok) {
-        // If backend sends 409 (Conflict), it means user exists but isn't verified
+        // HANDLE SIGNUP CONFLICT (User exists but not verified)
         if (response.status === 409) {
             toast.info("Please verify your email.");
             navigate("/verify-email", { state: { email } });
             return;
         }
+        
+        // HANDLE LOGIN UNVERIFIED (User correct pass but not verified)
+        if (response.status === 403 && data.detail && data.detail.includes("Email not verified")) {
+            toast.info("Verification code sent. Please verify your email.");
+            navigate("/verify-email", { state: { email } });
+            return;
+        }
+
         throw new Error(data.detail || "Request failed");
       }
 
       // SUCCESS HANDLERS
       if (isLogin) {
         localStorage.setItem("token", data.token);
+        // Ideally, you should also update your AuthContext here so the UI updates immediately
         navigate("/dashboard");
       } else {
         // Registration Success
         toast.success("Code sent! Check your email.");
-        // The state: { email } passes the email to the next page
         navigate("/verify-email", { state: { email } });
       }
 

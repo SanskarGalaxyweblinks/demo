@@ -6,7 +6,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import Index from "./pages/Index";
-import AuthPage from "./pages/AuthPage";
+// CHANGE 1: Import Auth instead of AuthPage
+import Auth from "./pages/Auth"; 
 import Dashboard from "./pages/Dashboard";
 import Demo from "./pages/Demo";
 import Models from "./pages/Models";
@@ -28,7 +29,7 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
-            <Route path="/auth" element={<AuthPage />} />
+            <Route path="/auth" element={<Auth />} />
             <Route path="/verify-email" element={<VerifyEmail />} />
             <Route path="/models" element={<Models />} />
             <Route path="/dashboard" element={<Dashboard />} />
@@ -41,7 +42,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-            <Route
+             <Route
               path="/demo/document"
               element={
                 <ProtectedRoute>
@@ -65,7 +66,6 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

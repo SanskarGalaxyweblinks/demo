@@ -104,6 +104,7 @@ async def verify_email(
 @router.post("/login", response_model=auth_models.AuthResponse)
 async def login(
     payload: auth_models.LoginRequest,
+    background_tasks: BackgroundTasks, # Add this dependency
     db: AsyncSession = Depends(get_db),
 ):
     user = await auth_service.authenticate_user(db, payload.email, payload.password)
@@ -115,14 +116,27 @@ async def login(
     
     # Check Verification Status
     if not user.email_verified:
+        # --- LOGIC TO RESEND OTP ---
+        otp = generate_otp()
+        hashed_otp = get_password_hash(otp)
+        otp_expires = datetime.utcnow() + timedelta(minutes=10)
+        
+        user.email_verification_token = hashed_otp
+        user.email_verification_token_expires = otp_expires
+        
+        db.add(user)
+        await db.commit()
+        
+        # Send email in background
+        background_tasks.add_task(send_verification_email, user.email, otp)
+
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Email not verified",
+            detail="Email not verified. A new verification code has been sent.",
         )
 
     token = auth_service.issue_token_for_user(user)
     
-    # Helper function from your original code
     def _to_user_model(user: User):
         return auth_models.UserModel(
             id=user.id,

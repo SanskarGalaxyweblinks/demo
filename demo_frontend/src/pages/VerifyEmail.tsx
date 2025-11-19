@@ -5,10 +5,11 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "sonner";
 import { MailCheck, Loader2 } from "lucide-react";
+import { env } from "process";
 
 // You might need to add a generic api fetcher here or import your existing one
 // For this example I'll assume a fetch wrapper or direct fetch
-const API_URL = "http://localhost:8000"; // Adjust port as needed
+const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 const VerifyEmail = () => {
   const [otp, setOtp] = useState("");
