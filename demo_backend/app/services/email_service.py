@@ -1,72 +1,124 @@
 # app/services/email_service.py
-import json
+from __future__ import annotations
+
+import re
 import time
-import os
-from langchain_groq import ChatGroq
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
-from .prompts import EMAIL_INFERENCE_PROMPT, EMAIL_CLASSIFICATION_PROMPT, MANUAL_VS_AUTONO_PROMPT
+from typing import Any
 
-# Initialize LLM
-# Llama3-70b is recommended for this level of reasoning
-llm = ChatGroq(
-    temperature=0,
-    model_name="openai/gpt-oss-20b",
-    api_key=os.environ.get("GROQ_API_KEY") # Or access via settings.groq_api_key
-)
+# KYC-specific keyword categories
+KYC_KEYWORDS = {
+    "Onboarding": [
+        "new account", "open account", "kyc", "verification", "onboard", 
+        "customer application", "register", "signup", "identity verification",
+        "documents attached", "driver license", "passport", "bank statement",
+        "complete verification", "account opening", "new customer"
+    ],
+    "Dispute": [
+        "dispute", "appeal", "rejected", "denied", "reconsider", "error",
+        "incorrect", "wrong decision", "review again", "challenge",
+        "complaint", "disagree", "unfair", "mistake", "resubmit"
+    ],
+    "Other": [
+        "question", "information", "help", "support", "inquiry", "general",
+        "how to", "what is", "can you", "please explain", "requirements"
+    ]
+}
 
-async def classify_email_chain(subject: str, body: str) -> dict:
+PRIORITY_KEYWORDS = {
+    "High": ["urgent", "immediately", "asap", "critical", "dispute", "rejected"],
+    "Medium": ["soon", "follow up", "schedule", "review"],
+}
+
+SENTIMENT_KEYWORDS = {
+    "Negative": ["unhappy", "disappointed", "frustrated", "angry", "upset"],
+    "Positive": ["thank", "great", "appreciate", "happy", "excellent"],
+}
+
+def classify_email(subject: str, body: str, user: dict[str, Any] | None) -> dict[str, Any]:
+    """
+    Classify emails into KYC categories using keyword matching and rules.
+    Simple, fast, and cost-effective approach for demo purposes.
+    """
     start_time = time.time()
     
-    # Combine Subject and Body for context
-    full_email_content = f"Subject: {subject}\n\nBody:\n{body}"
-
-    # --- STEP 1: INFERENCE (Summarization) ---
-    inference_chain = (
-        ChatPromptTemplate.from_template(EMAIL_INFERENCE_PROMPT) 
-        | llm 
-        | StrOutputParser()
-    )
+    # Combine subject and body for analysis
+    content = f"{subject} {body}".lower()
     
-    summary = await inference_chain.ainvoke({"email_body": full_email_content})
-
-    # --- STEP 2: BUSINESS CLASSIFICATION ---
-    classification_chain = (
-        ChatPromptTemplate.from_template(EMAIL_CLASSIFICATION_PROMPT)
-        | llm
-        | JsonOutputParser() # Ensures we get a dict back
-    )
-
-    initial_result = await classification_chain.ainvoke({
-        "email_body": full_email_content,
-        "email_inference": summary
-    })
-
-    final_category = initial_result.get("category")
-    final_reasoning = initial_result.get("reasoning")
-
-    # --- STEP 3: REFINEMENT (If Manual Review) ---
-    # Only run this if the first pass returned MANUAL_REVIEW
-    if final_category == "MANUAL_REVIEW":
-        refinement_chain = (
-            ChatPromptTemplate.from_template(MANUAL_VS_AUTONO_PROMPT)
-            | llm
-            | JsonOutputParser()
-        )
+    # Step 1: Determine KYC category
+    category = "Other"  # Default
+    category_confidence = 0.0
+    
+    for cat_name, keywords in KYC_KEYWORDS.items():
+        matches = sum(1 for keyword in keywords if keyword in content)
+        confidence = min(matches / len(keywords), 1.0)
         
-        refined_result = await refinement_chain.ainvoke({
-            "email_body": full_email_content
-        })
-        
-        # Update category and reasoning based on the deeper analysis
-        final_category = refined_result.get("category").upper() # Ensure uppercase
-        final_reasoning = f"{final_reasoning} -> Refined: {refined_result.get('reasoning')}"
-
-    execution_time = time.time() - start_time
-
+        if confidence > category_confidence:
+            category_confidence = confidence
+            category = cat_name
+    
+    # Step 2: Determine priority
+    priority = "Low"  # Default
+    for level, keywords in PRIORITY_KEYWORDS.items():
+        if any(keyword in content for keyword in keywords):
+            priority = level
+            break
+    
+    # Step 3: Determine sentiment
+    sentiment = "Neutral"  # Default
+    for sent, keywords in SENTIMENT_KEYWORDS.items():
+        if any(keyword in content for keyword in keywords):
+            sentiment = sent
+            break
+    
+    # Step 4: Extract tags
+    tags = set()
+    if user:
+        tags.add("authenticated")
+    
+    # Add specific tags based on content
+    if re.search(r'\battach', content):
+        tags.add("has_attachments")
+    if any(doc in content for doc in ["license", "passport", "id", "invoice"]):
+        tags.add("documents_mentioned")
+    if "$" in content or "usd" in content or "amount" in content:
+        tags.add("financial")
+    if any(word in content for word in ["deadline", "expires", "urgent"]):
+        tags.add("time_sensitive")
+    
+    # Step 5: Calculate overall confidence
+    base_confidence = 0.7
+    if category != "Other":
+        base_confidence += 0.15  # Boost if we found a specific category
+    if priority == "High":
+        base_confidence += 0.1
+    if len(tags) > 1:
+        base_confidence += 0.05
+    
+    confidence = min(base_confidence, 0.98)
+    
+    processing_time = time.time() - start_time
+    
     return {
-        "category": final_category,
-        "reasoning": final_reasoning,
-        "summary": summary.strip(),
-        "processing_time": round(execution_time, 2)
+        "category": category,
+        "priority": priority,
+        "sentiment": sentiment,
+        "confidence": round(confidence, 2),
+        "tags": sorted(list(tags)),
+        "processing_time": round(processing_time, 2)
+    }
+
+# Legacy function name for compatibility
+async def classify_email_chain(subject: str, body: str) -> dict:
+    """
+    Legacy wrapper function for backward compatibility.
+    Calls the new classify_email function.
+    """
+    result = classify_email(subject, body, None)
+    
+    # Add legacy fields for compatibility
+    return {
+        "category": result["category"],
+        "reasoning": f"Classified as {result['category']} based on keyword analysis and content patterns",
+        "summary": f"Email content analyzed for KYC classification. Priority: {result['priority']}, Sentiment: {result['sentiment']}",
+        "processing_time": result["processing_time"]
     }

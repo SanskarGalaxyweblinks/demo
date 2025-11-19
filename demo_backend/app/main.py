@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 # Importing all router modules
-from .api.routes import auth, documents, emails, erp, health, responses
+from .api.routes import auth, documents, emails, erp, health
 from .services import database
 
 @asynccontextmanager
@@ -32,11 +32,10 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(auth.router)
 
-# Feature Routes
-app.include_router(emails.router)
-app.include_router(documents.router)
-app.include_router(erp.router)
-app.include_router(responses.router)
+# KYC Feature Routes
+app.include_router(emails.router)      # KYC email classification
+app.include_router(documents.router)  # Document extraction + tamper detection
+app.include_router(erp.router)        # Customer records management
 
 @app.get("/", tags=["root"])
 async def root():

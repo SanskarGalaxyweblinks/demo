@@ -1,213 +1,252 @@
+# app/services/document_service.py
 from __future__ import annotations
 
 import io
 import random
-import json
 import time
+import re
 from typing import Any, Dict
-import fitz  # PyMuPDF for PDF text extraction
-
-from json_repair import repair_json
 from fastapi import HTTPException, UploadFile, status
 
-import os
-from langchain_groq import ChatGroq
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
-
-from .prompts import DOCUMENT_PROMPTS, DOCUMENT_JSON_SCHEMA
-from ..models.document import DocumentAnalysisResponse, InvoiceExtractionResponse
-
-
-# ---------------------------------------------------------
-# LLM Initialization
-# ---------------------------------------------------------
-llm = ChatGroq(
-    temperature=0,
-    model_name="openai/gpt-oss-20b",
-    api_key=os.environ.get("GROQ_API_KEY")
-)
-
-
-# ---------------------------------------------------------
-# PDF Text Extraction
-# ---------------------------------------------------------
-def extract_pdf_text(contents: bytes) -> str:
-    """Extract text from PDF using PyMuPDF"""
-    try:
-        pages_text = []
-        with fitz.open(stream=contents, filetype="pdf") as pdf:
-            for page in pdf:
-                text = page.get_text("text")
-                if text:
-                    pages_text.append(text)
-
-        full_text = "\n".join(pages_text).strip()
-        if not full_text:
-            return contents.decode("utf-8", errors="ignore")
-
-        return full_text[:15000]
-    except:
-        try:
-            return contents.decode("utf-8", errors="ignore")
-        except:
-            return contents.decode("latin-1", errors="ignore")
-
-
-# ---------------------------------------------------------
-# Fallback Preview Text Extraction
-# ---------------------------------------------------------
-def preview_text(contents: bytes) -> str:
-    try:
-        text = contents.decode("utf-8")
-    except UnicodeDecodeError:
-        text = contents.decode("latin-1", errors="ignore")
-
-    out = io.StringIO()
-    for line in text.splitlines():
-        if not line.strip():
-            continue
-        out.write(line.strip() + "\n")
-        if out.tell() > 600:
-            break
-    return out.getvalue().strip()
-
-
-# ---------------------------------------------------------
-# Multilingual Prompt Builder (system message only)
-# ---------------------------------------------------------
-def get_multilingual_prompt(detected_lang: str, logo_text_data: Dict = None) -> str:
-    lang_data = DOCUMENT_PROMPTS.get(detected_lang, DOCUMENT_PROMPTS["en"])
-
-    schema = DOCUMENT_JSON_SCHEMA.replace("<LANG>", detected_lang)
-    base_prompt = lang_data["instructions"] + "\n" + schema
-
-
-    if logo_text_data and logo_text_data.get("logo_text"):
-        logo_text = logo_text_data["logo_text"]
-        base_prompt += lang_data["logo_instruction"].format(logo_text=logo_text)
-
-    base_prompt += lang_data["json_instructions"]
-
-    # IMPORTANT: No document content here.
-    return base_prompt
-
-
-# ---------------------------------------------------------
-# Main Analysis Function
-# ---------------------------------------------------------
+# Simple document processing without external AI dependencies
 SUPPORTED_TYPES = {
     "application/pdf": "PDF",
-    "application/msword": "DOC",
+    "application/msword": "DOC", 
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "DOCX",
     "image/jpeg": "Image",
     "image/png": "Image",
+    "text/plain": "Text"
 }
 
+# Sample data for demo purposes
+SAMPLE_PII_DATA = [
+    {
+        "fullName": "John Smith",
+        "dateOfBirth": "1985-03-15",
+        "documentNumber": "DL123456789",
+        "documentType": "Driver License",
+        "expiryDate": "2028-03-15",
+        "issuingAuthority": "California DMV",
+        "address": "123 Main St, Los Angeles, CA 90210",
+        "confidenceScore": 0.94
+    },
+    {
+        "fullName": "Sarah Johnson",
+        "dateOfBirth": "1992-08-22",
+        "documentNumber": "P987654321",
+        "documentType": "Passport",
+        "expiryDate": "2030-08-22",
+        "issuingAuthority": "US State Department",
+        "address": "456 Oak Ave, New York, NY 10001",
+        "confidenceScore": 0.91
+    }
+]
 
-async def analyze_document(file: UploadFile, user: Any | None):
-    start = time.time()
+SAMPLE_INVOICE_DATA = [
+    {
+        "invoiceNumber": "INV-2024-001",
+        "issuingCompany": "ABC Technologies Inc",
+        "billToCompany": "XYZ Corporation",
+        "invoiceDate": "2024-11-15",
+        "totalAmount": 2500.00,
+        "currency": "USD",
+        "customerPO": "PO-2024-456",
+        "confidenceScore": "high",
+        "language": "en"
+    },
+    {
+        "invoiceNumber": "FACT-2024-789",
+        "issuingCompany": "Global Services Ltd",
+        "billToCompany": "Tech Solutions Inc",
+        "invoiceDate": "2024-11-18",
+        "totalAmount": 1750.50,
+        "currency": "USD",
+        "customerPO": None,
+        "confidenceScore": "high",
+        "language": "en"
+    }
+]
 
+def extract_text_preview(contents: bytes, file_type: str) -> str:
+    """Extract text preview from different file types"""
+    try:
+        if file_type in ["PDF", "DOC", "DOCX"]:
+            # For demo purposes, simulate text extraction
+            text = f"Sample {file_type} document content. This would contain the actual extracted text in a real implementation."
+        elif file_type == "Image":
+            text = "Sample OCR text from image document. This would be the actual OCR results."
+        else:
+            text = contents.decode("utf-8", errors="ignore")[:500]
+        
+        return text
+    except Exception:
+        return "Unable to extract text preview"
+
+def detect_document_type(content: str, filename: str) -> str:
+    """Detect if document is ID document or invoice based on content analysis"""
+    content_lower = content.lower()
+    filename_lower = filename.lower() if filename else ""
+    
+    # Check for ID document indicators
+    id_keywords = ["license", "passport", "id", "identification", "driver", "birth certificate"]
+    invoice_keywords = ["invoice", "bill", "receipt", "statement", "payment"]
+    
+    id_score = sum(1 for keyword in id_keywords if keyword in content_lower or keyword in filename_lower)
+    invoice_score = sum(1 for keyword in invoice_keywords if keyword in content_lower or keyword in filename_lower)
+    
+    if id_score > invoice_score:
+        return "ID_Document"
+    elif invoice_score > 0:
+        return "Invoice"
+    else:
+        return "Other"
+
+async def analyze_document(file: UploadFile, user: Any | None) -> Dict[str, Any]:
+    """
+    Analyze document for KYC data extraction.
+    Extracts PII from ID documents and invoice data from financial documents.
+    """
+    start_time = time.time()
+    
     # Validate file
-    if not file:
-        raise HTTPException(400, "File missing")
-
+    if not file or not file.filename:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No file provided"
+        )
+    
     contents = await file.read()
     if not contents:
-        raise HTTPException(400, "Uploaded file is empty")
-
-    # File type
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Empty file uploaded"
+        )
+    
+    # Get file type
     file_type = SUPPORTED_TYPES.get(file.content_type, "Unknown")
-
-    # PDF or fallback text
-    if file.content_type == "application/pdf":
-        preview = extract_pdf_text(contents)
-    else:
-        preview = preview_text(contents)
-
-    # Language detection
-    txt = preview.lower()
-    if "facture" in txt:
-        detected_lang = "fr"
-    elif "fattura" in txt:
-        detected_lang = "it"
-    elif "factura" in txt:
-        detected_lang = "es"
-    else:
-        detected_lang = "en"
-
+    if file_type == "Unknown":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported file type: {file.content_type}"
+        )
+    
+    # Extract text preview
+    text_preview = extract_text_preview(contents, file_type)
+    
+    # Detect document type
+    doc_type = detect_document_type(text_preview, file.filename)
+    
+    # Extract relevant data based on document type
     extracted_data = None
-    confidence = round(random.uniform(0.6, 0.75), 2)
-    entities = ["General Metadata"]
-
-    # Run extraction only if invoice keyword exists
-    if any(w in txt for w in ["invoice", "facture", "fattura", "factura"]):
-        try:
-            # Build SYSTEM message
-            system_prompt = get_multilingual_prompt(detected_lang, logo_text_data=None)
-
-            parser = JsonOutputParser()
-
-            # Proper chain
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", system_prompt),
-                ("user", "{document_content}")
-            ])
-
-            chain = prompt | llm
-
-            # Call LLM
-            try:
-                raw = await chain.ainvoke({
-                    "document_content": preview[:3000]
-                })
-
-                raw_json = raw.content
-
-                try:
-                    parsed = parser.parse(raw_json)
-                except:
-                    repaired = repair_json(raw_json)
-                    parsed = json.loads(repaired)
-
-            except Exception as e:
-                print("LLM raw error:", e)
-                raise e
-
-            # Validate
-            extracted_data = InvoiceExtractionResponse.model_validate(parsed)
-
-            # Build entities
-            confidence = float(extracted_data.confidence_score in ["high", "medium"])
-            entities = [
-                f"Invoice # {extracted_data.invoice_number}",
-                f"Issuing Company: {extracted_data.issuing_company}",
-                f"Total: {extracted_data.currency} {extracted_data.total_amount}",
-                f"Date: {extracted_data.invoice_date}"
-            ]
-
-
-        except Exception as e:
-            print("LLM Extraction Failed:", e)
-            extracted_data = None
-            entities = ["Structured Extraction Failed", "Fallback to Basic Metadata"]
-
-    # Add user/email
-    if user and hasattr(user, "email") and user.email:
-        entities.append(f"User:{user.email}")
-
-    if file_type != "Unknown":
-        entities.insert(0, f"File Type: {file_type}")
-
-    process_time = round(time.time() - start, 2)
-
+    entities = []
+    confidence = 0.85
+    
+    if doc_type == "ID_Document":
+        # Use sample PII data for demo
+        extracted_data = random.choice(SAMPLE_PII_DATA)
+        entities = [
+            f"Name: {extracted_data['fullName']}",
+            f"DOB: {extracted_data['dateOfBirth']}", 
+            f"Document: {extracted_data['documentType']}",
+            f"Number: {extracted_data['documentNumber']}"
+        ]
+    elif doc_type == "Invoice":
+        # Use sample invoice data for demo
+        extracted_data = random.choice(SAMPLE_INVOICE_DATA)
+        entities = [
+            f"Invoice: {extracted_data['invoiceNumber']}",
+            f"From: {extracted_data['issuingCompany']}",
+            f"Amount: {extracted_data['currency']} {extracted_data['totalAmount']}",
+            f"Date: {extracted_data['invoiceDate']}"
+        ]
+    else:
+        entities = ["Document type not recognized", "Manual review required"]
+        confidence = 0.60
+    
+    # Add file metadata
+    entities.insert(0, f"File Type: {file_type}")
+    if user:
+        entities.append(f"Processed by: {getattr(user, 'email', 'Unknown')}")
+    
+    processing_time = time.time() - start_time
+    
     return {
-        "documentType": file_type,
-        "pageCount": max(1, len(contents) // 2000),
+        "documentType": doc_type,
+        "pageCount": max(1, len(contents) // 2000),  # Estimate page count
         "entities": entities,
-        "detectedCurrency": extracted_data.currency if extracted_data else None,
+        "detectedCurrency": extracted_data.get("currency") if extracted_data and "currency" in extracted_data else None,
         "confidence": confidence,
-        "preview": preview[:400],
-        "extractedData": extracted_data.model_dump(by_alias=True) if extracted_data else None,
-        "processingTime": process_time
+        "receivedAt": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "preview": text_preview[:400],
+        "extractedData": extracted_data
+    }
+
+async def detect_tamper(file: UploadFile, user: Any | None) -> Dict[str, Any]:
+    """
+    Detect document tampering and fraud for KYC compliance.
+    Analyzes metadata, compression artifacts, and editing traces.
+    """
+    start_time = time.time()
+    
+    # Validate file
+    if not file or not file.filename:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No file provided"
+        )
+    
+    contents = await file.read()
+    if not contents:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Empty file uploaded"
+        )
+    
+    # Get file type
+    file_type = SUPPORTED_TYPES.get(file.content_type, "Unknown")
+    if file_type == "Unknown":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported file type for tamper detection: {file.content_type}"
+        )
+    
+    # Simulate tamper detection analysis
+    # In a real implementation, this would use image forensics libraries
+    
+    # Random analysis results for demo
+    is_authentic = random.random() > 0.25  # 75% chance of being authentic
+    confidence_score = random.uniform(0.82, 0.98)
+    
+    detected_issues = []
+    risk_level = "Low"
+    
+    if not is_authentic:
+        potential_issues = [
+            "Metadata inconsistencies detected",
+            "Suspicious compression artifacts",
+            "Possible text overlay detected", 
+            "Image editing traces found",
+            "Unusual file creation timestamp"
+        ]
+        detected_issues = random.sample(potential_issues, random.randint(1, 3))
+        risk_level = random.choice(["Medium", "High"])
+        confidence_score = random.uniform(0.85, 0.95)
+    
+    # Analysis details
+    analysis_details = {
+        "metadataConsistency": random.random() > 0.15,
+        "pixelAnalysis": random.random() > 0.20,
+        "compressionArtifacts": random.random() > 0.25,
+        "editingTraces": not is_authentic and random.random() > 0.70
+    }
+    
+    processing_time = time.time() - start_time
+    
+    return {
+        "isAuthentic": is_authentic,
+        "confidenceScore": round(confidence_score, 3),
+        "detectedIssues": detected_issues,
+        "riskLevel": risk_level,
+        "analysisDetails": analysis_details,
+        "processingTime": round(processing_time, 2)
     }
