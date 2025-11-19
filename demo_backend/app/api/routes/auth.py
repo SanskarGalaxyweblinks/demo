@@ -41,12 +41,12 @@ async def register(
     otp_expires = datetime.utcnow() + timedelta(minutes=10)
 
     # 3. Create User
-    # Ensure your auth_service has 'register_user' or 'create_user' matching this call
     user = await auth_service.register_user(
         db=db,
         email=payload.email,
         password=payload.password,
         full_name=payload.full_name,
+        organization_name=payload.organization_name, # Pass organization name
     )
     
     # 4. Update User with OTP
@@ -56,7 +56,7 @@ async def register(
     db.add(user)
     await db.commit()
 
-    # 5. Send Email in Background (Fixes lag)
+    # 5. Send Email in Background
     background_tasks.add_task(send_verification_email, user.email, otp)
 
     return {"message": "Registration successful. Please check your email."}
@@ -96,7 +96,7 @@ async def verify_email(
     return {"message": "Email verified successfully. You can now log in."}
 
 
-# --- Updated Login Route (Fixes missing email issue) ---
+# --- Updated Login Route ---
 @router.post("/login", response_model=auth_models.AuthResponse)
 async def login(
     payload: auth_models.LoginRequest,
@@ -126,13 +126,10 @@ async def login(
         # Add email task to queue
         background_tasks.add_task(send_verification_email, user.email, otp)
         
-        # --- FIX: RETURN JSONResponse INSTEAD OF RAISING EXCEPTION ---
-        # Raising HTTPException causes background tasks to be dropped.
-        # Returning JSONResponse ensures the background task is executed.
         return JSONResponse(
             status_code=status.HTTP_403_FORBIDDEN,
             content={"detail": "Email not verified. A new verification code has been sent."},
-            background=background_tasks # Explicitly attach the tasks
+            background=background_tasks 
         )
 
     token = auth_service.issue_token_for_user(user)
@@ -142,6 +139,7 @@ async def login(
             id=user.id,
             email=user.email,
             full_name=user.full_name,
+            organization_name=user.organization_name, # Add to response model mapping
             created_at=user.created_at,
         )
         

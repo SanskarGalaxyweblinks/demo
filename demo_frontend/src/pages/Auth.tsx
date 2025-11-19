@@ -4,10 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Brain, Mail, Lock, Sparkles } from "lucide-react";
+import { Brain, Mail, Lock, Building } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { useAuth } from "@/contexts/AuthContext"; // Import useAuth
+import { useAuth } from "@/contexts/AuthContext";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
@@ -15,20 +15,34 @@ const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState(""); // New state
   const [fullName, setFullName] = useState(""); 
+  const [organizationName, setOrganizationName] = useState(""); // New state
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
-  const { login } = useAuth(); // Get login function
+  const { login } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Frontend Password Match Check
+    if (!isLogin && password !== confirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       const endpoint = isLogin ? "/auth/login" : "/auth/register";
       const body = isLogin 
         ? { email, password } 
-        : { email, password, full_name: fullName || "New User" };
+        : { 
+            email, 
+            password, 
+            full_name: fullName || "New User",
+            organization_name: organizationName || null // Send org name
+          };
 
       const response = await fetch(`${API_URL}${endpoint}`, {
         method: "POST",
@@ -54,7 +68,6 @@ const Auth = () => {
 
       // SUCCESS HANDLERS
       if (isLogin) {
-        // Use context login to update global state
         login(data.token, data.user);
         toast.success("Logged in successfully!");
         navigate("/models");
@@ -65,6 +78,7 @@ const Auth = () => {
 
     } catch (error: any) {
       toast.error(error.message);
+    } finally {
       setIsLoading(false);
     }
   };
@@ -89,16 +103,33 @@ const Auth = () => {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             {!isLogin && (
-              <div className="space-y-2">
-                <Label htmlFor="fullName">Full Name</Label>
-                <Input 
-                  id="fullName" 
-                  value={fullName} 
-                  onChange={(e) => setFullName(e.target.value)} 
-                  placeholder="John Doe"
-                />
-              </div>
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="fullName">Full Name</Label>
+                  <Input 
+                    id="fullName" 
+                    value={fullName} 
+                    onChange={(e) => setFullName(e.target.value)} 
+                    placeholder="John Doe"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="orgName">Company Name</Label>
+                  <div className="relative">
+                    <Building className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input 
+                      id="orgName" 
+                      value={organizationName} 
+                      onChange={(e) => setOrganizationName(e.target.value)} 
+                      placeholder="Acme Corp"
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+              </>
             )}
+            
             <div className="space-y-2">
               <Label htmlFor="email" className="text-foreground">Email</Label>
               <div className="relative">
@@ -131,19 +162,35 @@ const Auth = () => {
               </div>
             </div>
 
+            {!isLogin && (
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword" className="text-foreground">Confirm Password</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    placeholder="••••••••"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="pl-10 bg-background border-border"
+                    required
+                  />
+                </div>
+              </div>
+            )}
+
             <Button 
               type="submit" 
               className="w-full" 
-              disabled={isLoading} // Disable button while loading
+              disabled={isLoading} 
             >
               {isLoading ? (
-                // Show this when loading
                 <div className="flex items-center gap-2">
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
                   {isLogin ? "Signing in..." : "Creating Account..."}
                 </div>
               ) : (
-                // Show this normally
                 isLogin ? "Sign In" : "Sign Up"
               )}
             </Button>

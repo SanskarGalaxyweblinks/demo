@@ -10,6 +10,7 @@ class UserModel(BaseModel):
     email: EmailStr
     # CHANGED: Use serialization_alias for output JSON key
     full_name: Optional[str] = Field(default=None, serialization_alias="fullName")
+    organization_name: Optional[str] = Field(default=None, serialization_alias="organizationName") # Added
     created_at: datetime = Field(serialization_alias="createdAt")
 
     model_config = ConfigDict(
@@ -27,6 +28,13 @@ class RegisterRequest(BaseModel):
         default=None,
         serialization_alias="fullName",
         validation_alias="full_name",
+    )
+    
+    # Added organization name field
+    organization_name: Optional[str] = Field(
+        default=None,
+        serialization_alias="organizationName",
+        validation_alias="organization_name", 
     )
 
     model_config = ConfigDict(

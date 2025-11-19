@@ -23,6 +23,7 @@ async def register_user(
     email: EmailStr,
     password: str,
     full_name: str | None,
+    organization_name: str | None, # Added parameter
 ) -> User:
     existing = await get_user_by_email(db, email)
     if existing:
@@ -32,6 +33,7 @@ async def register_user(
         email=email.lower(),
         hashed_password=get_password_hash(password),
         full_name=full_name,
+        organization_name=organization_name, # Store in DB
     )
     db.add(user)
     await db.commit()
