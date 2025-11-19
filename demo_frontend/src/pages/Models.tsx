@@ -1,12 +1,13 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Brain, Mail, FileText, MessageSquare, Database, ArrowRight } from "lucide-react";
+import { Brain, Mail, FileText, MessageSquare, Database, ArrowRight, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 
 const Models = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  // UPDATED: Import signOut from useAuth
+  const { user, signOut } = useAuth();
 
   const models = [
     {
@@ -51,9 +52,25 @@ const Models = () => {
     }
   };
 
+  // ADDED: Sign out logic
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/auth");
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted">
       <div className="container mx-auto px-6 py-12">
+        {/* ADDED: Sign Out button when user is logged in */}
+        {user && (
+          <div className="flex justify-end mb-4">
+            <Button variant="outline" onClick={handleSignOut}>
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign Out
+            </Button>
+          </div>
+        )}
+
         {/* Header */}
         <div className="text-center mb-12">
           <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full bg-card/80 backdrop-blur-sm border border-border/50 mb-6">

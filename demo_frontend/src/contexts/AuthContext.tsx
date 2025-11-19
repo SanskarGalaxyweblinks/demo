@@ -10,12 +10,16 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  // ADDED: Expose the signOut function
+  signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   session: null,
   loading: true,
+  // ADDED: Default implementation
+  signOut: async () => {},
 });
 
 export const useAuth = () => {
@@ -30,6 +34,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // ADDED: Function to handle signing out
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
 
   useEffect(() => {
     // Set up auth state listener
@@ -52,7 +61,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, session, loading }}>
+    <AuthContext.Provider value={{ user, session, loading, signOut: handleSignOut }}>
       {children}
     </AuthContext.Provider>
   );
