@@ -1,12 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Brain, Mail, FileText, Zap, CheckCircle, ArrowRight, Copy, Check } from "lucide-react";
+import { Brain, Mail, FileText, Shield, CheckCircle, ArrowRight, Copy, Check } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useState } from "react";
 
 const Index = () => {
   const [copied, setCopied] = useState(false);
-  const demoEmail = "demoemail@jupiterbrains.com";
+  const demoEmail = "kyc@jupiterbrains.com";
 
   const handleCopy = () => {
     navigator.clipboard.writeText(demoEmail);
@@ -17,23 +17,23 @@ const Index = () => {
   const features = [
     {
       icon: Mail,
-      title: "Email Classification",
-      description: "Intelligent categorization of incoming emails using CPU-optimized small language models"
+      title: "KYC Email Processing",
+      description: "Automatically classify onboarding and dispute emails to streamline customer workflows"
     },
     {
       icon: FileText,
-      title: "Document Processing",
-      description: "Extract and analyze content from PDFs, DOCX, and images with precision"
+      title: "Document Extraction",
+      description: "Extract critical PII and invoice data from customer documents with precision"
     },
     {
-      icon: Zap,
-      title: "Automated Responses",
-      description: "Generate contextual, policy-compliant responses automatically"
+      icon: Shield,
+      title: "Tamper Detection",
+      description: "Identify manipulated or edited documents to ensure authenticity and compliance"
     },
     {
       icon: CheckCircle,
       title: "ERP Integration",
-      description: "Seamlessly push parsed data into your ERP system"
+      description: "Automatically update customer records and process onboarding data in real-time"
     }
   ];
 
@@ -48,31 +48,31 @@ const Index = () => {
           <div className="max-w-4xl mx-auto text-center space-y-8">
             <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full bg-card/80 backdrop-blur-sm border border-border/50">
               <Brain className="w-5 h-5 text-primary" />
-              <span className="text-sm font-medium text-foreground">Powered by AI</span>
+              <span className="text-sm font-medium text-foreground">AI-Powered KYC</span>
             </div>
 
             <h1 className="text-5xl md:text-6xl font-bold text-foreground leading-tight">
-              AI-Powered Email & Document{" "}
+              Automated Customer{" "}
               <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                Classification
+                Onboarding Workflow
               </span>
             </h1>
 
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Experience the future of workflow automation with JupiterBrains' intelligent 
-              classification system. Process emails, extract documents, and generate responses instantly.
+              Experience complete end-to-end KYC automation. From email intake to document verification 
+              and ERP integration - all powered by intelligent AI models.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
               <Button asChild variant="hero" size="xl">
                 <Link to="/models">
-                  Try Interactive Demo
+                  Try KYC Demo
                   <ArrowRight className="w-5 h-5" />
                 </Link>
               </Button>
               <Button asChild variant="outline" size="xl">
                 <Link to="/dashboard">
-                  Live Dashboard
+                  Live ERP Dashboard
                 </Link>
               </Button>
             </div>
@@ -84,10 +84,10 @@ const Index = () => {
       <section className="container mx-auto px-6 py-20">
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-            Complete Workflow Automation
+            Complete KYC Automation
           </h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            From email reception to ERP integration, our AI handles every step of the process
+            From customer email to verified onboarding, our AI handles the entire compliance process
           </p>
         </div>
 
@@ -125,10 +125,10 @@ const Index = () => {
               <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
                 <Mail className="w-8 h-8 text-white" />
               </div>
-              <h3 className="text-2xl font-bold text-foreground">Demo Environment</h3>
+              <h3 className="text-2xl font-bold text-foreground">KYC Demo Environment</h3>
               <p className="text-muted-foreground">
-                This demonstration showcases real-time email classification, document extraction, 
-                and automated response generation. Send an email to see the AI in action.
+                Send an onboarding email with documents to see our AI automatically process, 
+                verify, and integrate customer data into the ERP system.
               </p>
               <div className="pt-4 flex items-center gap-3 justify-center">
                 <a 

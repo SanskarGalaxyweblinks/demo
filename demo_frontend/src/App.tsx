@@ -6,17 +6,15 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import Index from "./pages/Index";
-// CHANGE 1: Import Auth instead of AuthPage
-import Auth from "./pages/Auth"; 
+import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Demo from "./pages/Demo";
 import Models from "./pages/Models";
 import EmailDemo from "./pages/EmailDemo";
 import DocumentDemo from "./pages/DocumentDemo";
-import ResponseDemo from "./pages/ResponseDemo";
-import ErpDemo from "./pages/ErpDemo";
+import TamperDetection from "./pages/TamperDetection";
+import Instructions from "./pages/Instructions";
 import NotFound from "./pages/NotFound";
-import VerifyEmail from "./pages/VerifyEmail";
 
 const queryClient = new QueryClient();
 
@@ -30,10 +28,10 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
-            <Route path="/verify-email" element={<VerifyEmail />} />
             <Route path="/models" element={<Models />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/demo" element={<Demo />} />
+            <Route path="/instructions" element={<Instructions />} />
             <Route
               path="/demo/email"
               element={
@@ -42,7 +40,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-             <Route
+            <Route
               path="/demo/document"
               element={
                 <ProtectedRoute>
@@ -51,21 +49,14 @@ const App = () => (
               }
             />
             <Route
-              path="/demo/response"
+              path="/demo/tamper"
               element={
                 <ProtectedRoute>
-                  <ResponseDemo />
+                  <TamperDetection />
                 </ProtectedRoute>
               }
             />
-            <Route
-              path="/demo/erp"
-              element={
-                <ProtectedRoute>
-                  <ErpDemo />
-                </ProtectedRoute>
-              }
-            />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

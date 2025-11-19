@@ -1,7 +1,7 @@
 // src/pages/Models.tsx
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Brain, Mail, FileText, MessageSquare, Database, ArrowRight, LogOut } from "lucide-react";
+import { Brain, Mail, FileText, Shield, ArrowRight, LogOut, Database } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -14,34 +14,26 @@ const Models = () => {
     {
       id: "email",
       icon: Mail,
-      name: "Email Classifier",
-      description: "Intelligent email categorization using CPU-optimized small language models for instant classification.",
+      name: "KYC Email Classifier",
+      description: "Automatically classify onboarding requests, disputes, and general inquiries from customer emails.",
       color: "from-primary to-[hsl(195,100%,45%)]",
       route: "/demo/email"
     },
     {
       id: "document",
       icon: FileText,
-      name: "Document Classifier",
-      description: "Extract and analyze content from PDFs, DOCX, and images with advanced AI-powered processing.",
+      name: "Document Extractor",
+      description: "Extract critical PII, invoice data, and identity information from customer documents with precision.",
       color: "from-secondary to-[hsl(158,64%,42%)]",
       route: "/demo/document"
     },
     {
-      id: "response",
-      icon: MessageSquare,
-      name: "Automated Response Generator",
-      description: "Generate contextual, policy-compliant email responses automatically based on content analysis.",
+      id: "tamper",
+      icon: Shield,
+      name: "Tamper Detection",
+      description: "Identify manipulated, edited, or fraudulent documents to ensure compliance and authenticity.",
       color: "from-processing to-[hsl(45,93%,47%)]",
-      route: "/demo/response"
-    },
-    {
-      id: "erp",
-      icon: Database,
-      name: "ERP Integration Demo",
-      description: "Seamlessly push parsed data into your ERP system with real-time synchronization.",
-      color: "from-accent to-[hsl(30,92%,55%)]",
-      route: "/demo/erp"
+      route: "/demo/tamper"
     }
   ];
 
@@ -63,7 +55,11 @@ const Models = () => {
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted">
       <div className="container mx-auto px-6 py-12">
         {user && (
-          <div className="flex justify-end mb-4">
+          <div className="flex justify-end gap-3 mb-4">
+            <Button variant="outline" onClick={() => navigate("/dashboard")}>
+              <Database className="w-4 h-4 mr-2" />
+              ERP Dashboard
+            </Button>
             <Button variant="outline" onClick={handleSignOut}>
               <LogOut className="w-4 h-4 mr-2" />
               Sign Out
@@ -75,19 +71,19 @@ const Models = () => {
         <div className="text-center mb-12">
           <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full bg-card/80 backdrop-blur-sm border border-border/50 mb-6">
             <Brain className="w-5 h-5 text-primary" />
-            <span className="text-sm font-medium text-foreground">AI Model Selection</span>
+            <span className="text-sm font-medium text-foreground">KYC AI Models</span>
           </div>
           
           <h1 className="text-4xl md:text-5xl font-bold text-foreground mb-4">
-            Choose Your AI Model
+            KYC Automation Models
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Select from our suite of CPU-optimized AI models to experience intelligent automation
+            Experience our specialized AI models for customer onboarding and compliance automation
           </p>
         </div>
 
         {/* Model Grid */}
-        <div className="grid md:grid-cols-2 gap-6 max-w-6xl mx-auto">
+        <div className="grid md:grid-cols-3 gap-6 max-w-6xl mx-auto">
           {models.map((model) => {
             const Icon = model.icon;
             return (
@@ -123,7 +119,7 @@ const Models = () => {
         {!user && (
           <div className="text-center mt-12">
             <p className="text-muted-foreground mb-4">
-              Sign in to unlock full access to all AI models
+              Sign in to unlock full access to all KYC AI models
             </p>
             <Button onClick={() => navigate("/auth")} variant="hero" size="lg">
               Sign In / Sign Up
