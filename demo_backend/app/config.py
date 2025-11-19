@@ -19,10 +19,17 @@ class Settings(BaseModel):
         default_factory=lambda: os.getenv("SECRET_KEY", "super-secret-dev-key-change-me")
     )
     algorithm: str = "HS256"
+    
+    # --- Email Settings ---
+    MAIL_USERNAME: str = Field(default_factory=lambda: os.getenv("MAIL_USERNAME", ""))
+    MAIL_PASSWORD: str = Field(default_factory=lambda: os.getenv("MAIL_PASSWORD", ""))
+    MAIL_FROM: str = Field(default_factory=lambda: os.getenv("MAIL_FROM", "noreply@jupiterbrains.com"))
+    MAIL_PORT: int = Field(default_factory=lambda: int(os.getenv("MAIL_PORT", 587)))
+    MAIL_SERVER: str = Field(default_factory=lambda: os.getenv("MAIL_SERVER", "smtp.gmail.com"))
+    MAIL_STARTTLS: bool = Field(default_factory=lambda: os.getenv("MAIL_STARTTLS", "True").lower() == "true")
+    MAIL_SSL_TLS: bool = Field(default_factory=lambda: os.getenv("MAIL_SSL_TLS", "False").lower() == "true")
+
     # Allow configuring allowed CORS origins via the FRONTEND_ORIGIN env var.
-    # FRONTEND_ORIGIN may be a single origin or a comma-separated list.
-    # When not set, default to common localhost dev origins (avoid wildcard
-    # when `allow_credentials=True` to prevent browser CORS errors).
     cors_origins: list[str] = Field(
         default_factory=lambda: (
             [

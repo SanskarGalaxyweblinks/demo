@@ -13,3 +13,4 @@ langchain-groq
 langchain-core
 pymupdf
 json_repair
+fastapi-mail>=1.4.1
