@@ -1,4 +1,6 @@
-# app/services/prompts.py
+# ---------------------------------------------------------
+# EMAIL INFERENCE PROMPT
+# ---------------------------------------------------------
 
 EMAIL_INFERENCE_PROMPT = """
 You are an expert at understanding business emails in a debt collections context.
@@ -9,9 +11,9 @@ Focus on:
 - Are they requesting documents, claiming payment completion, or discussing payment arrangements?
 - Is this a human business communication requiring attention, or automated/system content?
 
-IMPORTANT: Only describe what is actually written in the email content. Do not infer or assume requests that are not explicitly stated.
+IMPORTANT: Only describe what is actually written in the email content. Do not infer.
 
-Be concise and factual. No categories, no explanations—just the sender's core intent in plain language.
+Be concise and factual. No categories, no explanations.
 
 EMAIL:
 "{email_body}"
@@ -19,25 +21,24 @@ EMAIL:
 SUMMARY:
 """
 
+
+# ---------------------------------------------------------
+# EMAIL CLASSIFICATION PROMPT
+# ---------------------------------------------------------
+
 EMAIL_CLASSIFICATION_PROMPT = """
 You are an expert email classifier working in a debt collections agency.
 
-1. Carefully read the email content and provided inference.
-2. Determine the correct classification based on intent, content, and business context.
-3. Choose ONE of the 2 main business categories below, or MANUAL_REVIEW if neither fits clearly.
-4. If you are uncertain about any classification, choose MANUAL_REVIEW.
+Follow these rules:
+1. Classify only as: INVOICE_REQUEST, CLAIMS_PAID, MANUAL_REVIEW.
+2. If sender claims ANY kind of past payment (even uncertain) → CLAIMS_PAID.
+3. If sender requests ANY invoice/document → INVOICE_REQUEST.
+4. Everything else → MANUAL_REVIEW.
+5. When unsure → MANUAL_REVIEW.
 
-CRITICAL BUSINESS RULE: "Paid means paid" - if someone claims payment was made (even with uncertainty), classify as CLAIMS_PAID.
+Return ONLY JSON:
+{"category": "CATEGORY_NAME", "reasoning": "Brief explanation"}
 
-Email Categories:
-1. INVOICE_REQUEST (Requests for documents/invoices)
-2. CLAIMS_PAID (Claims past payment completion)
-3. MANUAL_REVIEW (Everything else: Disputes, Promises to pay, Complex issues)
-
-Return ONLY valid JSON with category and reasoning keys. No extra text.
-{{"category": "CATEGORY_NAME", "reasoning": "Brief explanation"}}
-
-Input:
 EMAIL:
 "{email_body}"
 
@@ -45,81 +46,92 @@ INFERENCE:
 "{email_inference}"
 """
 
+
+# ---------------------------------------------------------
+# MANUAL VS AUTO VS NO_REPLY PROMPT
+# ---------------------------------------------------------
+
 MANUAL_VS_AUTONO_PROMPT = """
-You are an expert email intent classifier.
-Your task is to determine whether a given email that was initially marked as 'manual_review' is actually a personal AUTO_REPLY, a system-generated NO_REPLY, or a genuine MANUAL_REVIEW.
+You are an expert classifier.
 
-Categories:
-1. AUTO_REPLY (Out of office, vacation, personal absence)
-2. NO_REPLY (System notifications, ticket creations, newsletters)
-3. MANUAL_REVIEW (Human emails requiring attention, disputes, questions)
+Your task:
+- AUTO_REPLY → Out of office, vacation, personal absence
+- NO_REPLY → System messages, tickets, newsletters
+- MANUAL_REVIEW → Human-written content that needs a response
 
-Return ONLY valid JSON with category and reasoning keys. No extra text.
-{{"category": "manual_review" | "auto_reply" | "no_reply", "reasoning": "brief explanation"}}
+Return ONLY JSON:
+{"category": "auto_reply" | "no_reply" | "manual_review", "reasoning": "brief explanation"}
 
 EMAIL CONTENT:
 "{email_body}"
 """
 
-# --- DOCUMENT PROMPT CONSTANTS (New) ---
+
+# ---------------------------------------------------------
+# DOCUMENT (INVOICE) PROMPTS
+# ---------------------------------------------------------
 
 DOCUMENT_PROMPTS = {
     "en": {
-        "instructions": """You are an expert invoice data extractor. Extract key information from this English invoice text and return ONLY a valid JSON object.
+        "instructions": """You are an expert invoice data extractor. Extract key information from this invoice and return ONLY valid JSON.
 
-CRITICAL: Identify the ISSUING company (sender) vs BILL-TO company (customer):
-- ISSUING COMPANY: The business that SENT the invoice (appears at top, has logo, contact details)
-- BILL-TO COMPANY: The customer receiving the invoice (appears after "Bill To:", "Ship To:", "Customer:")
+CRITICAL:
+- ISSUING COMPANY = company that SENT the invoice (top/header)
+- BILL-TO COMPANY = customer receiving the invoice""",
 
-Required JSON format:""",
-        "json_instructions": "\nReturn ONLY the JSON object.\n\nInvoice text:\n",
-        "logo_instruction": '\nLogo text extracted: "{logo_text}"\nUse this logo text to help identify the ISSUING company (sender).',
+        "json_instructions": "\nReturn ONLY the JSON object.\n\nInvoice Text:\n",
+        "logo_instruction": '\nLogo text extracted: "{logo_text}"\nUse this to identify the issuing company.',
     },
+
     "fr": {
-        "instructions": """Vous êtes un expert en extraction de données de factures. Extrayez les informations clés de ce texte de facture française et retournez UNIQUEMENT un objet JSON valide.
+        "instructions": """Vous êtes un expert en extraction de données de factures.
 
-CRITIQUE: Identifiez l'entreprise ÉMETTRICE vs l'entreprise FACTURÉE:
-- ENTREPRISE ÉMETTRICE: L'entreprise qui a ENVOYÉ la facture (apparaît en haut, a le logo, coordonnées)
-- ENTREPRISE FACTURÉE: Le client qui reçoit la facture (apparaît après "Facturé à:", "Client:", "Destinataire:")
+CRITIQUE:
+- ENTREPRISE ÉMETTRICE = celle qui ENVOIE la facture
+- ENTREPRISE FACTURÉE = le client qui la reçoit""",
 
-Format JSON requis:""",
         "json_instructions": "\nRetournez UNIQUEMENT l'objet JSON.\n\nTexte de la facture:\n",
-        "logo_instruction": '\nTexte du logo extrait: "{logo_text}"\nUtilisez ce texte du logo pour identifier l\'entreprise ÉMETTRICE.',
+        "logo_instruction": '\nTexte du logo: "{logo_text}"\nAidez-vous-en pour identifier l\'entreprise émettrice.',
     },
+
     "it": {
-        "instructions": """Sei un esperto nell'estrazione di dati dalle fatture. Estrai le informazioni chiave da questo testo di fattura italiana e restituisci SOLO un oggetto JSON valido.
+        "instructions": """Sei un esperto nell'estrazione di dati da fatture.
 
-CRITICO: Identifica l'azienda EMITTENTE vs l'azienda FATTURATA:
-- AZIENDA EMITTENTE: L'azienda che ha INVIATO la fattura (appare in alto, ha il logo, dettagli di contatto)
-- AZIENDA FATTURATA: Il cliente che riceve la fattura (appare dopo "Fatturare a:", "Cliente:", "Destinatario:")
+CRITICO:
+- AZIENDA EMITTENTE = chi invia la fattura
+- AZIENDA FATTURATA = chi la riceve""",
 
-Formato JSON richiesto:""",
         "json_instructions": "\nRestituisci SOLO l'oggetto JSON.\n\nTesto della fattura:\n",
-        "logo_instruction": '\nTesto del logo estratto: "{logo_text}"\nUsa questo testo del logo per identificare l\'azienda EMITTENTE.',
+        "logo_instruction": '\nTesto del logo: "{logo_text}"\nUsalo per identificare l\'azienda emittente.',
     },
+
     "es": {
-        "instructions": """Eres un experto en extracción de datos de facturas. Extrae la información clave de este texto de factura española y devuelve SOLO un objeto JSON válido.
+        "instructions": """Eres un experto en extracción de datos de facturas.
 
-CRÍTICO: Identifica la empresa EMISORA vs la empresa FACTURADA:
-- EMPRESA EMISORA: La empresa que ENVIÓ la factura (aparece arriba, tiene logo, datos de contacto)
-- EMPRESA FACTURADA: El cliente que recibe la factura (aparece después de "Facturar a:", "Cliente:", "Destinatario:")
+CRÍTICO:
+- EMPRESA EMISORA = quien envía la factura
+- EMPRESA FACTURADA = el cliente""",
 
-Formato JSON requerido:""",
         "json_instructions": "\nDevuelve SOLO el objeto JSON.\n\nTexto de la factura:\n",
-        "logo_instruction": '\nTexto del logo extraído: "{logo_text}"\nUsa este texto del logo para identificar la empresa EMISORA.',
+        "logo_instruction": '\nTexto del logo: "{logo_text}"\nUsa esto para identificar la empresa emisora.',
     },
 }
+
+
+# ---------------------------------------------------------
+# JSON SCHEMA (CAMELCASE) — EXACTLY MATCHES PYDANTIC MODEL
+# ---------------------------------------------------------
 
 DOCUMENT_JSON_SCHEMA = """
-{
-    "invoice_number": "exact invoice number found",
-    "issuing_company": "company that SENT/ISSUED the invoice (NOT bill-to)", 
-    "bill_to_company": "customer company receiving the invoice",
-    "invoice_date": "YYYY-MM-DD format",
-    "total_amount": "final total number only (float or int)",
-    "currency": "currency symbol or code",
-    "customer_po": "purchase order number if found (string or null)",
-    "confidence_score": "high/medium/low",
-    "language": "en"
-}
+{{
+  "invoiceNumber": "exact invoice number found",
+  "issuingCompany": "company that SENT/ISSUED the invoice",
+  "billToCompany": "customer company receiving the invoice",
+  "invoiceDate": "YYYY-MM-DD",
+  "totalAmount": "final total number",
+  "currency": "currency symbol or code",
+  "customerPO": "purchase order number if found",
+  "confidenceScore": "high/medium/low",
+  "language": "<LANG>"
+}}
 """

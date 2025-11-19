@@ -5,55 +5,97 @@ import random
 import json
 import time
 from typing import Any, Dict
+import fitz  # PyMuPDF for PDF text extraction
 
+from json_repair import repair_json
 from fastapi import HTTPException, UploadFile, status
-# Imports for real LLM integration
+
 import os
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 
-from .prompts import DOCUMENT_PROMPTS, DOCUMENT_JSON_SCHEMA 
-# Import the actual models
+from .prompts import DOCUMENT_PROMPTS, DOCUMENT_JSON_SCHEMA
 from ..models.document import DocumentAnalysisResponse, InvoiceExtractionResponse
 
 
-# --- Initialize Real LLM ---
+# ---------------------------------------------------------
+# LLM Initialization
+# ---------------------------------------------------------
 llm = ChatGroq(
     temperature=0,
     model_name="openai/gpt-oss-20b",
-    api_key=os.environ.get("GROQ_API_KEY") 
+    api_key=os.environ.get("GROQ_API_KEY")
 )
 
 
-# --- Multilingual Prompt Generator (Using constants from prompts.py) ---
-def get_multilingual_prompt(text: str, detected_lang: str, logo_text_data: Dict = None) -> str:
-    """Create language-specific prompt for invoice extraction"""
-    
-    prompts = DOCUMENT_PROMPTS
-    json_schema = DOCUMENT_JSON_SCHEMA
-    
-    # 1. Get base instructions and schema
-    lang_data = prompts.get(detected_lang, prompts["en"])
-    # The JSON schema is formatted below the instructions to guide the LLM
-    base_prompt = lang_data["instructions"] + "\n" + json_schema
-    
-    # 2. Add optional logo text instruction
+# ---------------------------------------------------------
+# PDF Text Extraction
+# ---------------------------------------------------------
+def extract_pdf_text(contents: bytes) -> str:
+    """Extract text from PDF using PyMuPDF"""
+    try:
+        pages_text = []
+        with fitz.open(stream=contents, filetype="pdf") as pdf:
+            for page in pdf:
+                text = page.get_text("text")
+                if text:
+                    pages_text.append(text)
+
+        full_text = "\n".join(pages_text).strip()
+        if not full_text:
+            return contents.decode("utf-8", errors="ignore")
+
+        return full_text[:15000]
+    except:
+        try:
+            return contents.decode("utf-8", errors="ignore")
+        except:
+            return contents.decode("latin-1", errors="ignore")
+
+
+# ---------------------------------------------------------
+# Fallback Preview Text Extraction
+# ---------------------------------------------------------
+def preview_text(contents: bytes) -> str:
+    try:
+        text = contents.decode("utf-8")
+    except UnicodeDecodeError:
+        text = contents.decode("latin-1", errors="ignore")
+
+    out = io.StringIO()
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        out.write(line.strip() + "\n")
+        if out.tell() > 600:
+            break
+    return out.getvalue().strip()
+
+
+# ---------------------------------------------------------
+# Multilingual Prompt Builder (system message only)
+# ---------------------------------------------------------
+def get_multilingual_prompt(detected_lang: str, logo_text_data: Dict = None) -> str:
+    lang_data = DOCUMENT_PROMPTS.get(detected_lang, DOCUMENT_PROMPTS["en"])
+
+    schema = DOCUMENT_JSON_SCHEMA.replace("<LANG>", detected_lang)
+    base_prompt = lang_data["instructions"] + "\n" + schema
+
+
     if logo_text_data and logo_text_data.get("logo_text"):
-        logo_text = logo_text_data.get("logo_text", "")
-        logo_instructions = lang_data["logo_instruction"].format(logo_text=logo_text)
-        base_prompt += logo_instructions
+        logo_text = logo_text_data["logo_text"]
+        base_prompt += lang_data["logo_instruction"].format(logo_text=logo_text)
 
-    # 3. Add final instructions and truncate input text placeholder (actual text added later)
-    final_instructions = lang_data["json_instructions"]
-    base_prompt += final_instructions
-    
-    # Return the full prompt template string (will be formatted with content later)
-    return base_prompt + "\n{document_content}" 
+    base_prompt += lang_data["json_instructions"]
+
+    # IMPORTANT: No document content here.
+    return base_prompt
 
 
-# --- Main Analysis Function ---
-
+# ---------------------------------------------------------
+# Main Analysis Function
+# ---------------------------------------------------------
 SUPPORTED_TYPES = {
     "application/pdf": "PDF",
     "application/msword": "DOC",
@@ -63,56 +105,79 @@ SUPPORTED_TYPES = {
 }
 
 
-async def analyze_document(file: UploadFile, user: Any | None): # user is a User model from ORM
-    start_time = time.time()
-    
-    # --- Input Validation ---
+async def analyze_document(file: UploadFile, user: Any | None):
+    start = time.time()
+
+    # Validate file
     if not file:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File missing")
+        raise HTTPException(400, "File missing")
 
     contents = await file.read()
     if not contents:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+        raise HTTPException(400, "Uploaded file is empty")
 
+    # File type
     file_type = SUPPORTED_TYPES.get(file.content_type, "Unknown")
-    preview = preview_text(contents)
-    
-    # --- Heuristic for Language Detection (Basic Mock) ---
-    detected_lang = "en"
-    if "facture" in preview.lower():
-        detected_lang = "fr"
-    elif "fattura" in preview.lower():
-        detected_lang = "it"
-    elif "factura" in preview.lower():
-        detected_lang = "es"
 
-    # --- LLM Processing ---
+    # PDF or fallback text
+    if file.content_type == "application/pdf":
+        preview = extract_pdf_text(contents)
+    else:
+        preview = preview_text(contents)
+
+    # Language detection
+    txt = preview.lower()
+    if "facture" in txt:
+        detected_lang = "fr"
+    elif "fattura" in txt:
+        detected_lang = "it"
+    elif "factura" in txt:
+        detected_lang = "es"
+    else:
+        detected_lang = "en"
+
     extracted_data = None
     confidence = round(random.uniform(0.6, 0.75), 2)
     entities = ["General Metadata"]
-    
-    # Only run complex extraction on documents containing a keyword indicating an invoice
-    if any(word in preview.lower() for word in ["invoice", "facture", "fattura", "factura"]):
+
+    # Run extraction only if invoice keyword exists
+    if any(w in txt for w in ["invoice", "facture", "fattura", "factura"]):
         try:
-            # 1. Generate the LLM prompt (Instructions + JSON Schema)
-            full_llm_prompt = get_multilingual_prompt(preview, detected_lang, logo_text_data=None)
+            # Build SYSTEM message
+            system_prompt = get_multilingual_prompt(detected_lang, logo_text_data=None)
 
-            # 2. Define and invoke the LangChain pipeline (using globally initialized 'llm')
-            extraction_chain = (
-                ChatPromptTemplate.from_template(full_llm_prompt)
-                | llm
-                | JsonOutputParser()
-            )
+            parser = JsonOutputParser()
 
-            # Invoke the chain, passing the actual truncated content to the placeholder
-            llm_result = await extraction_chain.ainvoke({
-                "document_content": preview[:2500]
-            })
-            
-            # 3. Validate and populate the extraction model
-            extracted_data = InvoiceExtractionResponse.model_validate(llm_result)
-            
-            # Update confidence and entities based on extracted data
+            # Proper chain
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", system_prompt),
+                ("user", "{document_content}")
+            ])
+
+            chain = prompt | llm
+
+            # Call LLM
+            try:
+                raw = await chain.ainvoke({
+                    "document_content": preview[:3000]
+                })
+
+                raw_json = raw.content
+
+                try:
+                    parsed = parser.parse(raw_json)
+                except:
+                    repaired = repair_json(raw_json)
+                    parsed = json.loads(repaired)
+
+            except Exception as e:
+                print("LLM raw error:", e)
+                raise e
+
+            # Validate
+            extracted_data = InvoiceExtractionResponse.model_validate(parsed)
+
+            # Build entities
             confidence = float(extracted_data.confidence_score in ["high", "medium"])
             entities = [
                 f"Invoice # {extracted_data.invoice_number}",
@@ -120,52 +185,29 @@ async def analyze_document(file: UploadFile, user: Any | None): # user is a User
                 f"Total: {extracted_data.currency} {extracted_data.total_amount}",
                 f"Date: {extracted_data.invoice_date}"
             ]
-            
+
+
         except Exception as e:
-            # If LLM fails to return valid JSON or validation fails, capture error in logs/entities
-            print(f"LLM Extraction Failed: {e}")
-            confidence = round(random.uniform(0.6, 0.75), 2)
+            print("LLM Extraction Failed:", e)
+            extracted_data = None
             entities = ["Structured Extraction Failed", "Fallback to Basic Metadata"]
-    
-    # --- Finalizing Metadata ---
-    if user and hasattr(user, 'email') and user.email:
-        entities.append("User:" + user.email)
-        
+
+    # Add user/email
+    if user and hasattr(user, "email") and user.email:
+        entities.append(f"User:{user.email}")
+
     if file_type != "Unknown":
         entities.insert(0, f"File Type: {file_type}")
-        
-    execution_time = time.time() - start_time
-        
-    # --- Return Final Structured Response (FIXED KEYS to match Pydantic ALIASES) ---
-# app/services/document_service.py
 
-# ...
-    # --- Return Final Structured Response (FIXED KEYS to match Pydantic ALIASES) ---
+    process_time = round(time.time() - start, 2)
+
     return {
-        "documentType": file_type, # FIXED: was 'document_type'
-        "pageCount": max(1, len(contents) // 2000), # FIXED: was 'page_count'
+        "documentType": file_type,
+        "pageCount": max(1, len(contents) // 2000),
         "entities": entities,
-        "detectedCurrency": extracted_data.currency if extracted_data else None, # FIXED: was 'detected_currency'
+        "detectedCurrency": extracted_data.currency if extracted_data else None,
         "confidence": confidence,
         "preview": preview[:400],
-        "extractedData": extracted_data.model_dump(by_alias=True) if extracted_data else None, # FIXED: was 'extracted_data'
-        "processingTime": round(execution_time, 2) # FIXED: was 'processing_time'
+        "extractedData": extracted_data.model_dump(by_alias=True) if extracted_data else None,
+        "processingTime": process_time
     }
-
-
-def preview_text(contents: bytes) -> str:
-    # ... (function body remains unchanged)
-    try:
-        text = contents.decode("utf-8")
-    except UnicodeDecodeError:
-        text = contents[:400].decode("latin-1", errors="ignore")
-
-    output = io.StringIO()
-    for line in text.splitlines():
-        if not line.strip():
-            continue
-        output.write(line.strip())
-        output.write("\n")
-        if output.tell() > 600:
-            break
-    return output.getvalue().strip()
