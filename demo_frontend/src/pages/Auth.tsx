@@ -37,29 +37,23 @@ const Auth = () => {
       const data = await response.json();
 
       if (!response.ok) {
-        // Handle specific case: Email not verified during login
-        if (response.status === 403 && data.detail === "Email not verified") {
-            toast.error("Email not verified. Redirecting...");
+        // If backend sends 409 (Conflict), it means user exists but isn't verified
+        if (response.status === 409) {
+            toast.info("Please verify your email.");
             navigate("/verify-email", { state: { email } });
             return;
         }
-        // Handle specific case: Registering existing but unverified email
-        if (response.status === 409) {
-             toast.info("Account exists but not verified. Redirecting...");
-             navigate("/verify-email", { state: { email } });
-             return;
-        }
-        throw new Error(data.detail || "Authentication failed");
+        throw new Error(data.detail || "Request failed");
       }
 
+      // SUCCESS HANDLERS
       if (isLogin) {
-        // Handle successful login (store token, redirect to dashboard)
         localStorage.setItem("token", data.token);
-        toast.success("Welcome back!");
-        navigate("/dashboard"); // or wherever your protected route is
+        navigate("/dashboard");
       } else {
-        // Handle successful registration -> Redirect to Verify
-        toast.success("Account created! Please check your email.");
+        // Registration Success
+        toast.success("Code sent! Check your email.");
+        // The state: { email } passes the email to the next page
         navigate("/verify-email", { state: { email } });
       }
 

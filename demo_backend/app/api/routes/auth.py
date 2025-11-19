@@ -25,7 +25,7 @@ class ResendVerificationRequest(BaseModel):
     email: EmailStr
 
 # --- Updated Register Route ---
-@router.post("/register", status_code=status.HTTP_201_CREATED)
+@router.post("/register", status_code=status.HTTP_201_CREATED) 
 async def register(
     payload: auth_models.RegisterRequest,
     background_tasks: BackgroundTasks,
@@ -36,27 +36,17 @@ async def register(
     
     if existing_user:
         if existing_user.email_verified:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="User with this email already exists",
-            )
+            raise HTTPException(status_code=400, detail="User already exists")
         else:
-            # User exists but not verified: Resend OTP logic could go here
-            # For simplicity in this demo, we raise an error or handle resend
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Account exists but is not verified. Please verify your email.",
-            )
+            # Optional: Resend OTP logic here if needed
+            raise HTTPException(status_code=409, detail="Account exists but is not verified.")
 
-    # 2. Generate OTP and Hash it
+    # 2. Generate & Hash OTP
     otp = generate_otp()
     hashed_otp = get_password_hash(otp)
     otp_expires = datetime.utcnow() + timedelta(minutes=10)
 
-    # 3. Create User (Inactive/Unverified)
-    # We need to modify auth_service.register_user to accept these tokens 
-    # or manually create the user here if the service doesn't support it yet.
-    # Assuming we use the service but update the user object after:
+    # 3. Create User
     user = await auth_service.register_user(
         db=db,
         email=payload.email,
@@ -64,17 +54,19 @@ async def register(
         full_name=payload.full_name,
     )
     
-    # Update verification fields manually
+    # 4. Update User with OTP
     user.email_verified = False
     user.email_verification_token = hashed_otp
     user.email_verification_token_expires = otp_expires
     db.add(user)
     await db.commit()
 
-    # 4. Send Email in Background
+    # 5. Send Email (Background Task prevents blocking)
     background_tasks.add_task(send_verification_email, user.email, otp)
 
-    return {"message": "Registration successful. Please check your email for a verification code."}
+    # FIX: Return a simple message, NOT an AuthResponse
+    return {"message": "Registration successful. Please check your email."}
+
 
 # --- New Verify Email Route ---
 @router.post("/verify-email")
