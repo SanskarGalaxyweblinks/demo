@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 # Importing all router modules
-from .api.routes import auth, documents, emails, erp, health
+from .api.routes import auth, documents, emails, erp, health, kyc
 from .services import database
 
 @asynccontextmanager
@@ -32,9 +32,12 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(auth.router)
 
-# KYC Feature Routes
-app.include_router(emails.router)      # KYC email classification
-app.include_router(documents.router)  # Document extraction + tamper detection
+# KYC Complete Workflow (MAIN FEATURE)
+app.include_router(kyc.router)         # Complete KYC automation workflow
+
+# Individual KYC Feature Routes (for standalone demos)
+app.include_router(emails.router)      # Individual email classification
+app.include_router(documents.router)  # Individual document extraction + tamper detection
 app.include_router(erp.router)        # Customer records management
 
 @app.get("/", tags=["root"])

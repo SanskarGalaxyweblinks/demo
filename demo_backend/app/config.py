@@ -29,6 +29,50 @@ class Settings(BaseModel):
     MAIL_STARTTLS: bool = Field(default_factory=lambda: os.getenv("MAIL_STARTTLS", "True").lower() == "true")
     MAIL_SSL_TLS: bool = Field(default_factory=lambda: os.getenv("MAIL_SSL_TLS", "False").lower() == "true")
 
+    # --- Groq AI API Settings ---
+    GROQ_API_KEY: str = Field(
+        default_factory=lambda: os.getenv("GROQ_API_KEY", "")
+    )
+    GROQ_MODEL_EMAIL: str = Field(
+        default_factory=lambda: os.getenv("GROQ_MODEL_EMAIL", "llama-3.1-20b-versatile")
+    )
+    GROQ_MODEL_DOCUMENT: str = Field(
+        default_factory=lambda: os.getenv("GROQ_MODEL_DOCUMENT", "llama-3.1-20b-versatile")
+    )
+    GROQ_MAX_TOKENS: int = Field(
+        default_factory=lambda: int(os.getenv("GROQ_MAX_TOKENS", "1000"))
+    )
+    GROQ_TEMPERATURE: float = Field(
+        default_factory=lambda: float(os.getenv("GROQ_TEMPERATURE", "0.1"))
+    )
+    
+    # --- KYC Processing Settings ---
+    KYC_MAX_FILE_SIZE: int = Field(
+        default_factory=lambda: int(os.getenv("KYC_MAX_FILE_SIZE", "10485760"))  # 10MB
+    )
+    KYC_ALLOWED_EXTENSIONS: list[str] = Field(
+        default_factory=lambda: ["pdf", "jpg", "jpeg", "png", "doc", "docx"]
+    )
+    KYC_MAX_DAILY_REQUESTS_PER_USER: int = Field(
+        default_factory=lambda: int(os.getenv("KYC_MAX_DAILY_REQUESTS", "50"))
+    )
+    KYC_ENABLE_RATE_LIMITING: bool = Field(
+        default_factory=lambda: os.getenv("KYC_ENABLE_RATE_LIMITING", "True").lower() == "true"
+    )
+    
+    # --- Token Usage Tracking ---
+    GROQ_DAILY_TOKEN_LIMIT: int = Field(
+        default_factory=lambda: int(os.getenv("GROQ_DAILY_TOKEN_LIMIT", "100000"))
+    )
+    GROQ_ENABLE_TOKEN_TRACKING: bool = Field(
+        default_factory=lambda: os.getenv("GROQ_ENABLE_TOKEN_TRACKING", "True").lower() == "true"
+    )
+    
+    # --- OCR Settings ---
+    TESSERACT_CMD: str = Field(
+        default_factory=lambda: os.getenv("TESSERACT_CMD", "tesseract")
+    )
+    
     # Allow configuring allowed CORS origins via the FRONTEND_ORIGIN env var.
     cors_origins: list[str] = Field(
         default_factory=lambda: (

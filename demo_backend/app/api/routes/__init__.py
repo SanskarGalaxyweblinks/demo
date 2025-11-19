@@ -5,8 +5,9 @@ This module exposes all the API route modules for the KYC automation system.
 Each router handles a specific domain of functionality:
 
 - auth: User authentication and session management
-- emails: KYC email classification (Onboarding/Dispute/Other)
-- documents: Document extraction and tamper detection
+- kyc: Complete KYC workflow automation (MAIN FEATURE)
+- emails: Individual email classification (Onboarding/Dispute/Other)
+- documents: Individual document extraction and tamper detection
 - erp: Customer records and ERP integration
 - health: System health checks
 """
@@ -16,6 +17,7 @@ from . import documents
 from . import emails
 from . import erp
 from . import health
+from . import kyc
 
 __all__ = [
     "auth",
@@ -23,4 +25,5 @@ __all__ = [
     "emails",
     "erp",
     "health",
+    "kyc",
 ]

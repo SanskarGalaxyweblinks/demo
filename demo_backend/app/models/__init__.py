@@ -14,7 +14,7 @@ __all__ = [
     "document",
     "email",
     "erp",
-    "response",
+    "kyc",
     "user",
     "user_api_key",
 ]

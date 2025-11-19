@@ -1,124 +1,188 @@
 # app/services/email_service.py
 from __future__ import annotations
 
-import re
+import os
+import json
 import time
-from typing import Any
+from typing import Any, Dict
+from groq import Groq
 
-# KYC-specific keyword categories
-KYC_KEYWORDS = {
-    "Onboarding": [
-        "new account", "open account", "kyc", "verification", "onboard", 
-        "customer application", "register", "signup", "identity verification",
-        "documents attached", "driver license", "passport", "bank statement",
-        "complete verification", "account opening", "new customer"
-    ],
-    "Dispute": [
-        "dispute", "appeal", "rejected", "denied", "reconsider", "error",
-        "incorrect", "wrong decision", "review again", "challenge",
-        "complaint", "disagree", "unfair", "mistake", "resubmit"
-    ],
-    "Other": [
-        "question", "information", "help", "support", "inquiry", "general",
-        "how to", "what is", "can you", "please explain", "requirements"
-    ]
-}
+# Initialize Groq client
+def get_groq_client():
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        raise ValueError("GROQ_API_KEY not found in environment variables")
+    return Groq(api_key=api_key)
 
-PRIORITY_KEYWORDS = {
-    "High": ["urgent", "immediately", "asap", "critical", "dispute", "rejected"],
-    "Medium": ["soon", "follow up", "schedule", "review"],
-}
+# Advanced prompts for KYC email classification
+EMAIL_CLASSIFICATION_SYSTEM_PROMPT = """
+You are an expert AI system for KYC (Know Your Customer) email classification in the financial services industry. 
+Your task is to analyze customer emails and classify them into specific categories for automated processing.
 
-SENTIMENT_KEYWORDS = {
-    "Negative": ["unhappy", "disappointed", "frustrated", "angry", "upset"],
-    "Positive": ["thank", "great", "appreciate", "happy", "excellent"],
-}
+CLASSIFICATION CATEGORIES:
+1. "Onboarding" - New customer account applications, KYC document submissions, identity verification requests
+2. "Dispute" - Account verification disputes, rejection appeals, complaint about KYC process
+3. "Other" - General inquiries, questions about requirements, support requests
 
-def classify_email(subject: str, body: str, user: dict[str, Any] | None) -> dict[str, Any]:
+PRIORITY LEVELS:
+- "High" - Urgent requests, disputes, rejected applications, time-sensitive matters
+- "Medium" - Standard applications, follow-ups, document resubmissions  
+- "Low" - General questions, informational requests
+
+SENTIMENT ANALYSIS:
+- "Positive" - Appreciative, cooperative, satisfied tone
+- "Negative" - Frustrated, angry, disappointed, complaint tone
+- "Neutral" - Professional, matter-of-fact, informational tone
+
+EXTRACT RELEVANT TAGS from content such as:
+- "documents_attached" if attachments mentioned
+- "urgent_request" if urgency indicated
+- "new_customer" if first-time application
+- "existing_customer" if ongoing relationship
+- "compliance_issue" if regulatory concerns
+- "technical_issue" if system/process problems
+
+You must respond in valid JSON format only. Provide detailed reasoning for your classification.
+"""
+
+EMAIL_CLASSIFICATION_USER_PROMPT = """
+Analyze this customer email for KYC classification:
+
+SUBJECT: {subject}
+
+BODY: {body}
+
+Respond with a JSON object containing:
+{{
+    "category": "Onboarding|Dispute|Other",
+    "priority": "High|Medium|Low", 
+    "sentiment": "Positive|Negative|Neutral",
+    "confidence": 0.0-1.0,
+    "tags": ["relevant", "tags", "here"],
+    "reasoning": "Detailed explanation of classification decision"
+}}
+
+Focus on the customer's intent, urgency, emotional tone, and any KYC-related keywords or phrases.
+"""
+
+def classify_email(subject: str, body: str, user: Dict[str, Any] | None) -> Dict[str, Any]:
     """
-    Classify emails into KYC categories using keyword matching and rules.
-    Simple, fast, and cost-effective approach for demo purposes.
+    Classify emails into KYC categories using Groq API for real AI analysis.
     """
     start_time = time.time()
     
-    # Combine subject and body for analysis
+    try:
+        # Initialize Groq client
+        client = get_groq_client()
+        
+        # Format the prompt with actual email content
+        user_prompt = EMAIL_CLASSIFICATION_USER_PROMPT.format(
+            subject=subject,
+            body=body
+        )
+        
+        # Call Groq API
+        chat_completion = client.chat.completions.create(
+            messages=[
+                {
+                    "role": "system",
+                    "content": EMAIL_CLASSIFICATION_SYSTEM_PROMPT
+                },
+                {
+                    "role": "user", 
+                    "content": user_prompt
+                }
+            ],
+            model="llama-3.1-20b-versatile",  # Use the most capable model
+            temperature=0.1,  # Low temperature for consistent classification
+            max_tokens=500,
+            response_format={"type": "json_object"}  # Ensure JSON response
+        )
+        
+        # Parse the response
+        response_content = chat_completion.choices[0].message.content
+        ai_result = json.loads(response_content)
+        
+        # Add additional context tags
+        additional_tags = []
+        content = f"{subject} {body}".lower()
+        
+        if user:
+            additional_tags.append("authenticated_user")
+        if any(word in content for word in ["attach", "attached", "document", "file"]):
+            additional_tags.append("documents_mentioned")
+        if any(word in content for word in ["asap", "urgent", "immediately", "emergency"]):
+            additional_tags.append("urgent_request")
+        if any(word in content for word in ["new", "first", "initial", "opening"]):
+            additional_tags.append("new_customer")
+        
+        # Merge AI tags with additional context tags
+        all_tags = list(set(ai_result.get("tags", []) + additional_tags))
+        
+        processing_time = time.time() - start_time
+        
+        return {
+            "category": ai_result.get("category", "Other"),
+            "priority": ai_result.get("priority", "Medium"),
+            "sentiment": ai_result.get("sentiment", "Neutral"),
+            "confidence": float(ai_result.get("confidence", 0.85)),
+            "tags": sorted(all_tags),
+            "reasoning": ai_result.get("reasoning", "AI classification completed"),
+            "processing_time": round(processing_time, 2)
+        }
+        
+    except json.JSONDecodeError as e:
+        print(f"JSON parsing error: {e}")
+        return _fallback_classification(subject, body, user)
+    except Exception as e:
+        print(f"Groq API error: {e}")
+        return _fallback_classification(subject, body, user)
+
+def _fallback_classification(subject: str, body: str, user: Any) -> Dict[str, Any]:
+    """
+    Fallback classification using keyword matching if Groq API fails.
+    """
+    print("[EMAIL] Using fallback classification due to API error")
+    
     content = f"{subject} {body}".lower()
     
-    # Step 1: Determine KYC category
-    category = "Other"  # Default
-    category_confidence = 0.0
+    # Simple keyword-based classification
+    if any(word in content for word in ["kyc", "onboard", "verification", "application", "new account"]):
+        category = "Onboarding"
+        priority = "High" if any(word in content for word in ["urgent", "asap"]) else "Medium"
+    elif any(word in content for word in ["dispute", "appeal", "rejected", "complaint", "error"]):
+        category = "Dispute" 
+        priority = "High"
+    else:
+        category = "Other"
+        priority = "Low"
     
-    for cat_name, keywords in KYC_KEYWORDS.items():
-        matches = sum(1 for keyword in keywords if keyword in content)
-        confidence = min(matches / len(keywords), 1.0)
-        
-        if confidence > category_confidence:
-            category_confidence = confidence
-            category = cat_name
+    sentiment = "Negative" if any(word in content for word in ["angry", "frustrated", "upset"]) else "Neutral"
     
-    # Step 2: Determine priority
-    priority = "Low"  # Default
-    for level, keywords in PRIORITY_KEYWORDS.items():
-        if any(keyword in content for keyword in keywords):
-            priority = level
-            break
-    
-    # Step 3: Determine sentiment
-    sentiment = "Neutral"  # Default
-    for sent, keywords in SENTIMENT_KEYWORDS.items():
-        if any(keyword in content for keyword in keywords):
-            sentiment = sent
-            break
-    
-    # Step 4: Extract tags
-    tags = set()
+    tags = ["fallback_classification"]
     if user:
-        tags.add("authenticated")
-    
-    # Add specific tags based on content
-    if re.search(r'\battach', content):
-        tags.add("has_attachments")
-    if any(doc in content for doc in ["license", "passport", "id", "invoice"]):
-        tags.add("documents_mentioned")
-    if "$" in content or "usd" in content or "amount" in content:
-        tags.add("financial")
-    if any(word in content for word in ["deadline", "expires", "urgent"]):
-        tags.add("time_sensitive")
-    
-    # Step 5: Calculate overall confidence
-    base_confidence = 0.7
-    if category != "Other":
-        base_confidence += 0.15  # Boost if we found a specific category
-    if priority == "High":
-        base_confidence += 0.1
-    if len(tags) > 1:
-        base_confidence += 0.05
-    
-    confidence = min(base_confidence, 0.98)
-    
-    processing_time = time.time() - start_time
+        tags.append("authenticated_user")
     
     return {
         "category": category,
         "priority": priority,
         "sentiment": sentiment,
-        "confidence": round(confidence, 2),
-        "tags": sorted(list(tags)),
-        "processing_time": round(processing_time, 2)
+        "confidence": 0.75,
+        "tags": tags,
+        "reasoning": "Classified using fallback keyword analysis due to API unavailability",
+        "processing_time": 0.1
     }
 
-# Legacy function name for compatibility
-async def classify_email_chain(subject: str, body: str) -> dict:
+# Legacy function for backward compatibility
+async def classify_email_chain(subject: str, body: str) -> Dict[str, Any]:
     """
     Legacy wrapper function for backward compatibility.
-    Calls the new classify_email function.
     """
     result = classify_email(subject, body, None)
     
-    # Add legacy fields for compatibility
     return {
         "category": result["category"],
-        "reasoning": f"Classified as {result['category']} based on keyword analysis and content patterns",
-        "summary": f"Email content analyzed for KYC classification. Priority: {result['priority']}, Sentiment: {result['sentiment']}",
+        "reasoning": result["reasoning"],
+        "summary": f"Email classified as {result['category']} with {result['confidence']:.1%} confidence",
         "processing_time": result["processing_time"]
     }

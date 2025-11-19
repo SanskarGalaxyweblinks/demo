@@ -1,130 +1,248 @@
-# app/services/prompts.py
-
-EMAIL_INFERENCE_PROMPT = """
-You are an expert at understanding business emails in a debt collections context.
-
-Summarize the MAIN INTENT of the email in 2-3 lines.
-Focus on:
-- What specific action or response does the sender want from ABC Collections?
-- Are they requesting documents, claiming payment completion, or discussing payment arrangements?
-- Is this a human business communication requiring attention, or automated/system content?
-
-IMPORTANT: Only describe what is actually written in the email content. Do not infer or assume requests that are not explicitly stated.
-
-Be concise and factual. No categories, no explanations—just the sender's core intent in plain language.
-
-EMAIL:
-"{email_body}"
-
-SUMMARY:
+# demo_backend/app/services/prompts.py
+"""
+Optimized prompts for KYC AI processing using Groq API.
+Contains system and user prompts for email classification and document analysis.
 """
 
-EMAIL_CLASSIFICATION_PROMPT = """
-You are an expert email classifier working in a debt collections agency.
+# =============================================================================
+# EMAIL CLASSIFICATION PROMPTS
+# =============================================================================
 
-1. Carefully read the email content and provided inference.
-2. Determine the correct classification based on intent, content, and business context.
-3. Choose ONE of the 2 main business categories below, or MANUAL_REVIEW if neither fits clearly.
-4. If you are uncertain about any classification, choose MANUAL_REVIEW.
+EMAIL_CLASSIFICATION_SYSTEM_PROMPT = """
+You are an expert AI system for KYC (Know Your Customer) email classification in the financial services industry. 
+Your task is to analyze customer emails and classify them into specific categories for automated processing.
 
-CRITICAL BUSINESS RULE: "Paid means paid" - if someone claims payment was made (even with uncertainty), classify as CLAIMS_PAID.
+CLASSIFICATION CATEGORIES (REQUIRED - pick exactly one):
+1. "Onboarding" - New customer account applications, KYC document submissions, identity verification requests, account opening requests
+2. "Dispute" - Account verification disputes, rejection appeals, complaints about KYC process, requests for reconsideration
+3. "Other" - General inquiries, questions about requirements, support requests, informational queries
 
-Email Categories:
-1. INVOICE_REQUEST (Requests for documents/invoices)
-2. CLAIMS_PAID (Claims past payment completion)
-3. MANUAL_REVIEW (Everything else: Disputes, Promises to pay, Complex issues)
+PRIORITY LEVELS (REQUIRED - pick exactly one):
+- "High" - Urgent requests, disputes, rejected applications, time-sensitive matters, complaints
+- "Medium" - Standard applications, follow-ups, document resubmissions, routine inquiries  
+- "Low" - General questions, informational requests, non-urgent support
 
-Return ONLY valid JSON with category and reasoning keys. No extra text.
-{{"category": "CATEGORY_NAME", "reasoning": "Brief explanation"}}
+SENTIMENT ANALYSIS (REQUIRED - pick exactly one):
+- "Positive" - Appreciative, cooperative, satisfied, thankful tone
+- "Negative" - Frustrated, angry, disappointed, complaint tone, dissatisfied
+- "Neutral" - Professional, matter-of-fact, informational, business-like tone
 
-Input:
-EMAIL:
-"{email_body}"
+EXTRACT RELEVANT TAGS from content (include any that apply):
+- "documents_attached" if attachments mentioned
+- "urgent_request" if urgency indicated  
+- "new_customer" if first-time application
+- "existing_customer" if ongoing relationship mentioned
+- "compliance_issue" if regulatory concerns
+- "technical_issue" if system/process problems
+- "resubmission" if re-sending documents
+- "deadline_mentioned" if time constraints noted
+- "financial_documents" if bank statements, invoices mentioned
+- "id_documents" if passport, license, ID mentioned
 
-INFERENCE:
-"{email_inference}"
+IMPORTANT: You must respond in valid JSON format only. Provide detailed reasoning for your classification decisions.
 """
 
-MANUAL_VS_AUTONO_PROMPT = """
-You are an expert email intent classifier.
-Your task is to determine whether a given email that was initially marked as 'manual_review' is actually a personal AUTO_REPLY, a system-generated NO_REPLY, or a genuine MANUAL_REVIEW.
+EMAIL_CLASSIFICATION_USER_PROMPT = """
+Analyze this customer email for KYC classification:
 
-Categories:
-1. AUTO_REPLY (Out of office, vacation, personal absence)
-2. NO_REPLY (System notifications, ticket creations, newsletters)
-3. MANUAL_REVIEW (Human emails requiring attention, disputes, questions)
+SUBJECT: {subject}
 
-Return ONLY valid JSON with category and reasoning keys. No extra text.
-{{"category": "manual_review" | "auto_reply" | "no_reply", "reasoning": "brief explanation"}}
+BODY: {body}
 
-EMAIL CONTENT:
-"{email_body}"
+Respond with a JSON object containing exactly these fields:
+{{
+    "category": "Onboarding|Dispute|Other",
+    "priority": "High|Medium|Low", 
+    "sentiment": "Positive|Negative|Neutral",
+    "confidence": 0.0-1.0,
+    "tags": ["relevant", "tags", "here"],
+    "reasoning": "Detailed explanation of classification decision including specific keywords and context that led to this classification"
+}}
+
+Focus on the customer's intent, urgency level, emotional tone, and any KYC-related keywords or phrases. 
+Consider document attachments, deadlines, and compliance requirements when determining priority.
 """
-# ---------------------------------------------------------
-# DOCUMENT (INVOICE) PROMPTS
-# ---------------------------------------------------------
 
-DOCUMENT_PROMPTS = {
-    "en": {
-        "instructions": """You are an expert invoice data extractor. Extract key information from this invoice and return ONLY valid JSON.
+# =============================================================================
+# DOCUMENT ANALYSIS PROMPTS  
+# =============================================================================
 
-CRITICAL:
-- ISSUING COMPANY = company that SENT the invoice (top/header)
-- BILL-TO COMPANY = customer receiving the invoice""",
+DOCUMENT_ANALYSIS_SYSTEM_PROMPT = """
+You are an expert AI system for KYC document analysis. Your task is to extract critical information from identity documents and financial documents for customer onboarding and compliance.
 
-        "json_instructions": "\nReturn ONLY the JSON object.\n\nInvoice Text:\n",
-        "logo_instruction": '\nLogo text extracted: "{logo_text}"\nUse this to identify the issuing company.',
-    },
+DOCUMENT TYPES TO IDENTIFY (pick the most specific):
+- "ID_Document" - Driver's licenses, passports, national IDs, state IDs, voter cards
+- "Financial_Document" - Bank statements, invoices, receipts, tax documents, pay stubs
+- "Proof_of_Address" - Utility bills, lease agreements, official correspondence with address
+- "Business_Document" - Business licenses, incorporation papers, tax certificates
+- "Other" - Any document that doesn't clearly fit the above categories
 
-    "fr": {
-        "instructions": """Vous êtes un expert en extraction de données de factures.
+FOR ID DOCUMENTS, EXTRACT (use null if not found):
+- Full name (first and last name)
+- Date of birth (in YYYY-MM-DD format if possible)
+- Document number (license number, passport number, etc.)
+- Document type (Driver License, Passport, National ID, etc.)
+- Issuing authority (DMV, State Department, etc.)
+- Expiry date (in YYYY-MM-DD format if possible)  
+- Address (if present on document)
 
-CRITIQUE:
-- ENTREPRISE ÉMETTRICE = celle qui ENVOIE la facture
-- ENTREPRISE FACTURÉE = le client qui la reçoit""",
+FOR FINANCIAL DOCUMENTS, EXTRACT (use null if not found):
+- Company/institution name
+- Document number (invoice #, account #, statement #)
+- Date (in YYYY-MM-DD format if possible)
+- Amount/balance (numerical value)
+- Currency (USD, EUR, GBP, etc.)
+- Account holder name
+- Account number (if applicable)
 
-        "json_instructions": "\nRetournez UNIQUEMENT l'objet JSON.\n\nTexte de la facture:\n",
-        "logo_instruction": '\nTexte du logo: "{logo_text}"\nAidez-vous-en pour identifier l\'entreprise émettrice.',
-    },
+FOR PROOF OF ADDRESS, EXTRACT (use null if not found):
+- Name on document
+- Full address
+- Document date (in YYYY-MM-DD format if possible)
+- Issuing company/authority
+- Service type (electricity, gas, internet, etc.)
 
-    "it": {
-        "instructions": """Sei un esperto nell'estrazione di dati da fatture.
+IMPORTANT: You must respond in valid JSON format only. Extract actual data from the document text provided.
+"""
 
-CRITICO:
-- AZIENDA EMITTENTE = chi invia la fattura
-- AZIENDA FATTURATA = chi la riceve""",
+DOCUMENT_ANALYSIS_USER_PROMPT = """
+Analyze this document text for KYC data extraction:
 
-        "json_instructions": "\nRestituisci SOLO l'oggetto JSON.\n\nTesto della fattura:\n",
-        "logo_instruction": '\nTesto del logo: "{logo_text}"\nUsalo per identificare l\'azienda emittente.',
-    },
+DOCUMENT TEXT:
+{document_text}
 
-    "es": {
-        "instructions": """Eres un experto en extracción de datos de facturas.
+FILENAME: {filename}
 
-CRÍTICO:
-- EMPRESA EMISORA = quien envía la factura
-- EMPRESA FACTURADA = el cliente""",
+Respond with a JSON object containing exactly these fields:
+{{
+    "document_type": "ID_Document|Financial_Document|Proof_of_Address|Business_Document|Other",
+    "extracted_entities": ["Entity 1: Value 1", "Entity 2: Value 2", "..."],
+    "structured_data": {{
+        "field_name": "actual_extracted_value",
+        "field_name2": "actual_extracted_value2"
+    }},
+    "confidence": 0.0-1.0,
+    "summary": "Brief description of document content and what was extracted"
+}}
 
-        "json_instructions": "\nDevuelve SOLO el objeto JSON.\n\nTexto de la factura:\n",
-        "logo_instruction": '\nTexto del logo: "{logo_text}"\nUsa esto para identificar la empresa emisora.',
-    },
+Extract all relevant KYC information from the actual document text. Use null for fields that cannot be found.
+Create extracted_entities as "Field: Value" pairs for easy reading.
+Set confidence based on how clearly the information could be extracted from the text.
+"""
+
+# =============================================================================
+# PROMPT TEMPLATES
+# =============================================================================
+
+def format_email_classification_prompt(subject: str, body: str) -> tuple[str, str]:
+    """Format email classification prompts with actual content"""
+    system_prompt = EMAIL_CLASSIFICATION_SYSTEM_PROMPT
+    user_prompt = EMAIL_CLASSIFICATION_USER_PROMPT.format(
+        subject=subject,
+        body=body
+    )
+    return system_prompt, user_prompt
+
+def format_document_analysis_prompt(document_text: str, filename: str) -> tuple[str, str]:
+    """Format document analysis prompts with actual content"""
+    system_prompt = DOCUMENT_ANALYSIS_SYSTEM_PROMPT
+    user_prompt = DOCUMENT_ANALYSIS_USER_PROMPT.format(
+        document_text=document_text,
+        filename=filename
+    )
+    return system_prompt, user_prompt
+
+# =============================================================================
+# RESPONSE VALIDATION SCHEMAS
+# =============================================================================
+
+EMAIL_CLASSIFICATION_SCHEMA = {
+    "category": ["Onboarding", "Dispute", "Other"],
+    "priority": ["High", "Medium", "Low"],
+    "sentiment": ["Positive", "Negative", "Neutral"],
+    "confidence": {"type": "float", "min": 0.0, "max": 1.0},
+    "tags": {"type": "list"},
+    "reasoning": {"type": "string", "min_length": 10}
 }
 
+DOCUMENT_ANALYSIS_SCHEMA = {
+    "document_type": ["ID_Document", "Financial_Document", "Proof_of_Address", "Business_Document", "Other"],
+    "extracted_entities": {"type": "list"},
+    "structured_data": {"type": "dict"},
+    "confidence": {"type": "float", "min": 0.0, "max": 1.0},
+    "summary": {"type": "string", "min_length": 10}
+}
 
-# ---------------------------------------------------------
-# JSON SCHEMA (CAMELCASE) — EXACTLY MATCHES PYDANTIC MODEL
-# ---------------------------------------------------------
+def validate_email_response(response_data: dict) -> bool:
+    """Validate email classification response format"""
+    try:
+        # Check required fields exist
+        required_fields = ["category", "priority", "sentiment", "confidence", "tags", "reasoning"]
+        for field in required_fields:
+            if field not in response_data:
+                return False
+        
+        # Validate category
+        if response_data["category"] not in EMAIL_CLASSIFICATION_SCHEMA["category"]:
+            return False
+        
+        # Validate priority  
+        if response_data["priority"] not in EMAIL_CLASSIFICATION_SCHEMA["priority"]:
+            return False
+        
+        # Validate sentiment
+        if response_data["sentiment"] not in EMAIL_CLASSIFICATION_SCHEMA["sentiment"]:
+            return False
+        
+        # Validate confidence
+        confidence = response_data["confidence"]
+        if not isinstance(confidence, (int, float)) or confidence < 0.0 or confidence > 1.0:
+            return False
+        
+        # Validate tags is list
+        if not isinstance(response_data["tags"], list):
+            return False
+        
+        # Validate reasoning has content
+        if not isinstance(response_data["reasoning"], str) or len(response_data["reasoning"]) < 10:
+            return False
+        
+        return True
+        
+    except Exception:
+        return False
 
-DOCUMENT_JSON_SCHEMA = """
-{{
-  "invoiceNumber": "exact invoice number found",
-  "issuingCompany": "company that SENT/ISSUED the invoice",
-  "billToCompany": "customer company receiving the invoice",
-  "invoiceDate": "YYYY-MM-DD",
-  "totalAmount": "final total number",
-  "currency": "currency symbol or code",
-  "customerPO": "purchase order number if found",
-  "confidenceScore": "high/medium/low",
-  "language": "<LANG>"
-}}
-"""
+def validate_document_response(response_data: dict) -> bool:
+    """Validate document analysis response format"""
+    try:
+        # Check required fields exist
+        required_fields = ["document_type", "extracted_entities", "structured_data", "confidence", "summary"]
+        for field in required_fields:
+            if field not in response_data:
+                return False
+        
+        # Validate document_type
+        if response_data["document_type"] not in DOCUMENT_ANALYSIS_SCHEMA["document_type"]:
+            return False
+        
+        # Validate extracted_entities is list
+        if not isinstance(response_data["extracted_entities"], list):
+            return False
+        
+        # Validate structured_data is dict
+        if not isinstance(response_data["structured_data"], dict):
+            return False
+        
+        # Validate confidence
+        confidence = response_data["confidence"]
+        if not isinstance(confidence, (int, float)) or confidence < 0.0 or confidence > 1.0:
+            return False
+        
+        # Validate summary has content
+        if not isinstance(response_data["summary"], str) or len(response_data["summary"]) < 10:
+            return False
+        
+        return True
+        
+    except Exception:
+        return False
