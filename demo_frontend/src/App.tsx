@@ -15,6 +15,7 @@ import DocumentDemo from "./pages/DocumentDemo";
 import ResponseDemo from "./pages/ResponseDemo";
 import ErpDemo from "./pages/ErpDemo";
 import NotFound from "./pages/NotFound";
+import VerifyEmail from "./pages/VerifyEmail";
 
 const queryClient = new QueryClient();
 
@@ -28,6 +29,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<AuthPage />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
             <Route path="/models" element={<Models />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/demo" element={<Demo />} />

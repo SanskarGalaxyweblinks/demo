@@ -198,7 +198,7 @@ const AuthPage = () => {
               </span>
             </div>
 
-            <Button
+            {/* <Button
               onClick={handleGoogleAuth}
               variant="outline"
               className="w-full"
@@ -223,7 +223,7 @@ const AuthPage = () => {
                 />
               </svg>
               Continue with Google
-            </Button>
+            </Button> */}
 
             <div className="text-center text-sm">
               <button

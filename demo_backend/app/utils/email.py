@@ -1,3 +1,4 @@
+# demo_backend/app/utils/email.py
 import os
 import random
 import string
@@ -5,8 +6,6 @@ import aiosmtplib
 from email.message import EmailMessage
 
 # --- Configuration Fetching ---
-# We fetch these from the .env file. 
-# If they are missing, we default to empty strings or safe defaults.
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER")
@@ -34,9 +33,10 @@ async def send_email(to_email: str, subject: str, body: str):
             msg,
             hostname=SMTP_HOST,
             port=SMTP_PORT,
-            start_tls=True,  # Required for Gmail on port 587
+            start_tls=True,
             username=SMTP_USER,
             password=SMTP_PASS,
+            validate_certs=False,  # CHANGED: Disable cert validation for local dev
         )
         print(f"✅ Email sent to {to_email}")
     except Exception as e:

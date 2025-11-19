@@ -4,16 +4,70 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Brain, Mail, Lock, Sparkles } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+
+const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // Add state for name if you want to support full registration
+  const [fullName, setFullName] = useState(""); 
+  const [isLoading, setIsLoading] = useState(false);
+  const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Authentication will be implemented with Lovable Cloud
-    console.log("Auth attempt:", { email, password, isLogin });
+    setIsLoading(true);
+
+    try {
+      const endpoint = isLogin ? "/auth/login" : "/auth/register";
+      const body = isLogin 
+        ? { email, password } 
+        : { email, password, full_name: fullName || "New User" };
+
+      const response = await fetch(`${API_URL}${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        // Handle specific case: Email not verified during login
+        if (response.status === 403 && data.detail === "Email not verified") {
+            toast.error("Email not verified. Redirecting...");
+            navigate("/verify-email", { state: { email } });
+            return;
+        }
+        // Handle specific case: Registering existing but unverified email
+        if (response.status === 409) {
+             toast.info("Account exists but not verified. Redirecting...");
+             navigate("/verify-email", { state: { email } });
+             return;
+        }
+        throw new Error(data.detail || "Authentication failed");
+      }
+
+      if (isLogin) {
+        // Handle successful login (store token, redirect to dashboard)
+        localStorage.setItem("token", data.token);
+        toast.success("Welcome back!");
+        navigate("/dashboard"); // or wherever your protected route is
+      } else {
+        // Handle successful registration -> Redirect to Verify
+        toast.success("Account created! Please check your email.");
+        navigate("/verify-email", { state: { email } });
+      }
+
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -35,6 +89,17 @@ const Auth = () => {
         
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            {!isLogin && (
+              <div className="space-y-2">
+                <Label htmlFor="fullName">Full Name</Label>
+                <Input 
+                  id="fullName" 
+                  value={fullName} 
+                  onChange={(e) => setFullName(e.target.value)} 
+                  placeholder="John Doe"
+                />
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="email" className="text-foreground">Email</Label>
               <div className="relative">
