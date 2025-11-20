@@ -333,7 +333,7 @@ const EmailDemo = () => {
             </div>
             <h1 className="text-4xl font-bold text-foreground mb-4">Real AI KYC Workflow</h1>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Send your onboarding request with documents and watch real Groq AI process everything from email to ERP integration
+              Send your onboarding request with documents and watch real AI process everything from email to ERP integration
             </p>
           </div>
 
@@ -547,7 +547,7 @@ const EmailDemo = () => {
                         Delete Record
                       </Button>
                     </CardTitle>
-                    <CardDescription>Complete automation results from real Groq AI and ERP integration</CardDescription>
+                    <CardDescription>Complete automation results from real AI and ERP integration</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="grid md:grid-cols-2 gap-6">

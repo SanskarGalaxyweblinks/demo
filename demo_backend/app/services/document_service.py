@@ -188,7 +188,7 @@ async def analyze_document(file: UploadFile, user: Any | None) -> Dict[str, Any]
                     "content": user_prompt
                 }
             ],
-            model="llama-3.1-20b-versatile",
+            model="openai/gpt-oss-20b",
             temperature=0.1,
             max_tokens=800,
             response_format={"type": "json_object"}

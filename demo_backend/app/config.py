@@ -34,10 +34,10 @@ class Settings(BaseModel):
         default_factory=lambda: os.getenv("GROQ_API_KEY", "")
     )
     GROQ_MODEL_EMAIL: str = Field(
-        default_factory=lambda: os.getenv("GROQ_MODEL_EMAIL", "llama-3.1-20b-versatile")
+        default_factory=lambda: os.getenv("GROQ_MODEL_EMAIL", "openai/gpt-oss-20b")
     )
     GROQ_MODEL_DOCUMENT: str = Field(
-        default_factory=lambda: os.getenv("GROQ_MODEL_DOCUMENT", "llama-3.1-20b-versatile")
+        default_factory=lambda: os.getenv("GROQ_MODEL_DOCUMENT", "openai/gpt-oss-20b")
     )
     GROQ_MAX_TOKENS: int = Field(
         default_factory=lambda: int(os.getenv("GROQ_MAX_TOKENS", "1000"))

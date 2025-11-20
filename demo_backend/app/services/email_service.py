@@ -93,7 +93,7 @@ def classify_email(subject: str, body: str, user: Dict[str, Any] | None) -> Dict
                     "content": user_prompt
                 }
             ],
-            model="llama-3.1-20b-versatile",  # Use the most capable model
+            model="openai/gpt-oss-20b",  # Use the most capable model
             temperature=0.1,  # Low temperature for consistent classification
             max_tokens=500,
             response_format={"type": "json_object"}  # Ensure JSON response

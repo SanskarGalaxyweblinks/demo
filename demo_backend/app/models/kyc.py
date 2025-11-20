@@ -35,6 +35,10 @@ class DocumentExtractionResult(BaseModel):
     extracted_data: Optional[Dict[str, Any]] = Field(alias="extractedData", description="Structured extracted data")
     processing_time: float = Field(alias="processingTime", description="Processing duration")
 
+    # ADD THIS CONFIG BLOCK
+    class Config:
+        populate_by_name = True
+
 class TamperDetectionResult(BaseModel):
     """Document tamper detection results"""
     is_authentic: bool = Field(alias="isAuthentic", description="Document authenticity status")
@@ -44,11 +48,19 @@ class TamperDetectionResult(BaseModel):
     analysis_details: Dict[str, bool] = Field(alias="analysisDetails", description="Detailed analysis breakdown")
     processing_time: float = Field(alias="processingTime", description="Processing duration")
 
+    # ADD THIS CONFIG BLOCK
+    class Config:
+        populate_by_name = True
+
 class ERPIntegrationResult(BaseModel):
     """ERP integration results"""
     customer_id: str = Field(alias="customerId", description="Generated customer ID")
     status: str = Field(description="Integration status")
     message: str = Field(description="Status message")
+
+    # ADD THIS CONFIG BLOCK
+    class Config:
+        populate_by_name = True
 
 class KYCWorkflowResponse(BaseModel):
     """Complete KYC workflow response with all processing results"""
