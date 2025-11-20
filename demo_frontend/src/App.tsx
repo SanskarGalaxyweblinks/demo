@@ -3,7 +3,6 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-// Correcting imports by using simple relative paths to fix persistent resolution errors
 import { AuthProvider } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import Index from "./pages/Index";
@@ -14,6 +13,7 @@ import Models from "./pages/Models";
 import EmailDemo from "./pages/EmailDemo";
 import DocumentDemo from "./pages/DocumentDemo";
 import TamperDetection from "./pages/TamperDetection";
+import ChatbotDemo from "./pages/ChatbotDemo"; // New Import
 import Instructions from "./pages/Instructions";
 import NotFound from "./pages/NotFound";
 import VerifyEmail from "./pages/VerifyEmail"; 
@@ -34,10 +34,9 @@ const App = () => (
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/demo" element={<Demo />} />
             <Route path="/instructions" element={<Instructions />} />
-            
-            {/* Route for email verification to fix the 404 after registration */}
             <Route path="/verify-email" element={<VerifyEmail />} />
 
+            {/* Protected Routes */}
             <Route
               path="/demo/email"
               element={
@@ -62,7 +61,16 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            {/* New Chatbot Route */}
+            <Route
+              path="/demo/chatbot"
+              element={
+                <ProtectedRoute>
+                  <ChatbotDemo />
+                </ProtectedRoute>
+              }
+            />
+            
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

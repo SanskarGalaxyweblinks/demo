@@ -1,7 +1,7 @@
 // src/pages/Models.tsx
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Brain, Mail, FileText, Shield, ArrowRight, LogOut, Database, Info } from "lucide-react";
+import { Brain, Mail, FileText, Shield, ArrowRight, LogOut, Database, Info, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -14,7 +14,7 @@ const Models = () => {
       id: "email",
       icon: Mail,
       name: "Complete KYC Workflow",
-      description: "End-to-end automation: Email classification, document extraction, tamper detection, and ERP integration in one unified process.",
+      description: "End-to-end automation: Email classification, document extraction, tamper detection, and ERP integration.",
       color: "from-primary to-[hsl(195,100%,45%)]",
       route: "/demo/email",
       isMain: true
@@ -23,7 +23,7 @@ const Models = () => {
       id: "document", 
       icon: FileText,
       name: "Document Extractor",
-      description: "Standalone document processing: Extract PII from ID documents and invoice data from financial documents.",
+      description: "Standalone document processing: Extract PII from ID documents and invoice data.",
       color: "from-secondary to-[hsl(158,64%,42%)]",
       route: "/demo/document",
       isMain: false
@@ -32,9 +32,18 @@ const Models = () => {
       id: "tamper",
       icon: Shield,
       name: "Tamper Detection",
-      description: "Standalone fraud detection: Analyze documents for manipulation, editing traces, and authenticity verification.",
+      description: "Standalone fraud detection: Analyze documents for manipulation and editing traces.",
       color: "from-processing to-[hsl(45,93%,47%)]",
       route: "/demo/tamper",
+      isMain: false
+    },
+    {
+      id: "chat",
+      icon: Sparkles,
+      name: "JupiterBrains Chat Lens",
+      description: "Financial insights agent that aggregates data from SQL databases, internal documents, and the web.",
+      color: "from-accent to-[hsl(38,92%,50%)]",
+      route: "/demo/chatbot",
       isMain: false
     }
   ];
@@ -72,26 +81,25 @@ const Models = () => {
           </div>
         )}
 
-        {/* Header */}
         <div className="text-center mb-12">
           <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full bg-card/80 backdrop-blur-sm border border-border/50 mb-6">
             <Brain className="w-5 h-5 text-primary" />
-            <span className="text-sm font-medium text-foreground">KYC AI Models</span>
+            <span className="text-sm font-medium text-foreground">AI Models Hub</span>
           </div>
           
           <h1 className="text-4xl md:text-5xl font-bold text-foreground mb-4">
-            KYC Automation Models
+            JupiterBrains AI Suite
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Experience our specialized AI models for customer onboarding and compliance automation
+            Enterprise-grade AI models for KYC automation, document forensics, and financial intelligence.
           </p>
         </div>
 
         {/* Featured Model */}
         <div className="mb-12">
           <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-foreground mb-2">Featured Demo</h2>
-            <p className="text-muted-foreground">Complete end-to-end KYC automation workflow</p>
+            <h2 className="text-2xl font-bold text-foreground mb-2">Featured Workflow</h2>
+            <p className="text-muted-foreground">End-to-end automation pipeline</p>
           </div>
           
           <Card className="group border-border/50 bg-card/80 backdrop-blur-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-2 max-w-4xl mx-auto border-primary/20">
@@ -141,17 +149,17 @@ const Models = () => {
         {/* Individual Models */}
         <div className="mb-8">
           <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-foreground mb-2">Individual Model Demos</h2>
-            <p className="text-muted-foreground">Test specific AI models in isolation</p>
+            <h2 className="text-2xl font-bold text-foreground mb-2">Standalone Models</h2>
+            <p className="text-muted-foreground">Access specific AI capabilities directly</p>
           </div>
           
-          <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+          <div className="grid md:grid-cols-3 gap-6 max-w-6xl mx-auto">
             {models.filter(model => !model.isMain).map((model) => {
               const Icon = model.icon;
               return (
                 <Card 
                   key={model.id} 
-                  className="group border-border/50 bg-card/80 backdrop-blur-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
+                  className="group border-border/50 bg-card/80 backdrop-blur-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1 flex flex-col"
                 >
                   <CardHeader>
                     <div className={`w-14 h-14 rounded-lg bg-gradient-to-br ${model.color} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
@@ -162,13 +170,13 @@ const Models = () => {
                       {model.description}
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="mt-auto">
                     <Button 
                       onClick={() => handleTryDemo(model.route)}
                       className="w-full group/btn"
                       variant="outline"
                     >
-                      Try Individual Demo
+                      Launch Demo
                       <ArrowRight className="w-4 h-4 ml-2 group-hover/btn:translate-x-1 transition-transform" />
                     </Button>
                   </CardContent>
@@ -177,7 +185,7 @@ const Models = () => {
             })}
           </div>
         </div>
-
+        
         {/* Info Section */}
         <Card className="border-border/50 bg-card/80 backdrop-blur-sm max-w-4xl mx-auto">
           <CardContent className="pt-6">
