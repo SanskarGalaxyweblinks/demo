@@ -34,6 +34,31 @@ export const ChatInterface = () => {
     }
   }, [history, dbContent, vectorContent, webContent, summaryContent]);
 
+  // Helper to format history for backend (Last 3 interactions)
+  const getRecentHistory = () => {
+    const recentHistory: { query: string; response: string }[] = [];
+    
+    // Iterate backwards to find the last 3 pairs of (User -> Assistant)
+    // We skip the current processing message (which isn't in 'history' state yet during handleSend execution, or is handled separately)
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (recentHistory.length >= 3) break;
+
+      const msg = history[i];
+      if (msg.role === "assistant") {
+        // Find the corresponding preceding user message
+        const prevMsg = history[i - 1];
+        if (prevMsg && prevMsg.role === "user") {
+           recentHistory.unshift({
+             query: prevMsg.content,
+             response: msg.content
+           });
+           i--; // Skip the user message we just consumed
+        }
+      }
+    }
+    return recentHistory;
+  };
+
   const processStream = async (endpoint: string, body: any, onChunk: (text: string) => void, onSources?: (srcs: string[]) => void) => {
     try {
       const response = await fetch(`${CHATBOT_API}${endpoint}`, {
@@ -97,16 +122,27 @@ export const ChatInterface = () => {
     setCurrentSources([]);
 
     const collectedSources: string[] = [];
+    
+    // Prepare history payload (fetches from existing state, so it excludes current new message)
+    const historyPayload = getRecentHistory();
 
     try {
-      // 1. Database Stream
-      const dbResult = await processStream("/stream-db", { query: userMsg.content, language: "English" }, setDbContent);
+      // 1. Database Stream (WITH HISTORY)
+      const dbResult = await processStream("/stream-db", { 
+        query: userMsg.content, 
+        chat_history: historyPayload,
+        language: "English" 
+      }, setDbContent);
       
-      // 2. Vector Stream
+      // 2. Vector Stream (WITH HISTORY)
       setStreamStatus(prev => ({ ...prev, step: "vector" }));
       const vectorResult = await processStream(
         "/stream-vector", 
-        { query: userMsg.content, language: "English" }, 
+        { 
+          query: userMsg.content, 
+          chat_history: historyPayload,
+          language: "English" 
+        }, 
         setVectorContent, 
         (srcs) => {
           setCurrentSources(prev => [...prev, ...srcs]);
@@ -114,24 +150,28 @@ export const ChatInterface = () => {
         }
       );
 
-      // 3. Web Stream
-      setStreamStatus(prev => ({ ...prev, step: "web" }));
-      const webResult = await processStream(
-        "/stream-web", 
-        { query: userMsg.content, language: "English" }, 
-        setWebContent, 
-        (srcs) => {
-          setCurrentSources(prev => [...prev, ...srcs]);
-          collectedSources.push(...srcs);
-        }
-      );
+      // 3. Web Stream (WITH HISTORY)
+    //   setStreamStatus(prev => ({ ...prev, step: "web" }));
+    //   const webResult = await processStream(
+    //     "/stream-web", 
+    //     { 
+    //       query: userMsg.content, 
+    //       chat_history: historyPayload,
+    //       language: "English" 
+    //     }, 
+    //     setWebContent, 
+    //     (srcs) => {
+    //       setCurrentSources(prev => [...prev, ...srcs]);
+    //       collectedSources.push(...srcs);
+    //     }
+    //   );
 
-      // 4. Summary Stream
+      // 4. Summary Stream (WITHOUT HISTORY as requested)
       setStreamStatus(prev => ({ ...prev, step: "summary" }));
       const summaryResult = await processStream("/stream-summary", { 
         user_query: userMsg.content,
         db_response: dbResult,
-        article_response: vectorResult + "\n" + webResult, 
+        article_response: vectorResult, 
         language: "English"
       }, setSummaryContent);
 
@@ -141,11 +181,10 @@ export const ChatInterface = () => {
         role: "assistant",
         content: summaryResult || "I couldn't generate a summary, but please check the data sources above.",
         sources: collectedSources,
-        // PERSIST THE THINKING STEPS HERE
         thoughts: {
           database: dbResult,
           vector: vectorResult,
-          web: webResult
+          web: ""
         }
       };
       
@@ -164,12 +203,21 @@ export const ChatInterface = () => {
         <div className="space-y-6 pb-4">
           {history.length === 0 && (
              <div className="h-[400px] flex flex-col items-center justify-center text-center text-muted-foreground opacity-50">
-               <div className="w-20 h-20 bg-accent/20 rounded-full flex items-center justify-center mb-4">
-                 <Sparkles className="w-10 h-10 text-accent" />
-               </div>
-               <h3 className="font-semibold text-lg">JupiterBrains Chat Lens</h3>
-               <p className="text-sm max-w-sm mt-2">Ask about financial data, market trends, or company details. I'll analyze databases, documents, and the web.</p>
-             </div>
+                <div className="w-20 h-20 bg-accent/20 rounded-full flex items-center justify-center mb-4">
+                    <Sparkles className="w-10 h-10 text-accent" />
+                </div>
+                <h3 className="font-semibold text-lg">Welcome to your JupiterBrains Bot! 🚀</h3>
+                <div className="text-sm max-w-md mt-2 flex flex-col gap-2">
+                    <p>I can help you explore Saudi market data for Banks and Transportation sectors. Ask me about:</p>
+                    <ul className="list-disc list-inside text-left mx-auto">
+                    <li>Company Profiles & Financials (e.g., Al Rajhi Bank)</li>
+                    <li>Stock Prices, Dividends & Capital Changes</li>
+                    <li>Board Members & Major Shareholders</li>
+                    <li>Latest Corporate News & Announcements</li>
+                    </ul>
+                    <p className="font-medium mt-2">Type a company name or question to get started!</p>
+                </div>
+            </div>
           )}
 
           {history.map((msg) => (
