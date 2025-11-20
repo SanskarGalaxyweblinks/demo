@@ -9,6 +9,7 @@ from pydantic import BaseModel, EmailStr
 from ...models import auth as auth_models
 from ...services import auth_service
 from ...services.database import get_db
+from ...services.erp_service import create_customer_in_odoo
 from ...utils.email import generate_otp, send_verification_email
 from ...security import get_password_hash, verify_password 
 
@@ -40,13 +41,13 @@ async def register(
     hashed_otp = get_password_hash(otp)
     otp_expires = datetime.utcnow() + timedelta(minutes=10)
 
-    # 3. Create User
+    # 3. Create User locally
     user = await auth_service.register_user(
         db=db,
         email=payload.email,
         password=payload.password,
         full_name=payload.full_name,
-        organization_name=payload.organization_name, # Pass organization name
+        organization_name=payload.organization_name, 
     )
     
     # 4. Update User with OTP
@@ -58,6 +59,22 @@ async def register(
 
     # 5. Send Email in Background
     background_tasks.add_task(send_verification_email, user.email, otp)
+
+    # ---------------------------------------------------------
+    # NEW: Send Contact to Odoo ERP
+    # ---------------------------------------------------------
+    # Determine the display name to avoid "Unknown Customer"
+    odoo_name = payload.full_name
+    if not odoo_name:
+        # Fallback to email prefix if no name provided
+        odoo_name = payload.email.split('@')[0]
+    
+    # Append organization if available for better context in Odoo
+    if payload.organization_name:
+        odoo_name = f"{odoo_name} ({payload.organization_name})"
+
+    # Trigger Odoo creation in background so it doesn't block the response
+    background_tasks.add_task(create_customer_in_odoo, odoo_name, payload.email)
 
     return {"message": "Registration successful. Please check your email."}
 
