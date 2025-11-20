@@ -8,21 +8,24 @@ import { StreamSection } from "./StreamSection";
 import { ChatMessage, StreamStatus } from "./ChatbotTypes";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import ReactMarkdown from "react-markdown"; 
+import remarkGfm from "remark-gfm";
 
-// Assume the chatbot backend runs on a specific port (update if different)
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
-const CHATBOT_API = `${BASE_URL}/chatbot`;
+// Using the specific IP you provided
+const CHATBOT_API = "http://10.178.206.146:8001";
 
 export const ChatInterface = () => {
   const [query, setQuery] = useState("");
   const [history, setHistory] = useState<ChatMessage[]>([]);
   const [streamStatus, setStreamStatus] = useState<StreamStatus>({ step: "idle", isStreaming: false });
   
-  // Temporary state for streaming chunks
+  // Temporary state for streaming chunks (for UI display only)
   const [dbContent, setDbContent] = useState("");
   const [vectorContent, setVectorContent] = useState("");
   const [webContent, setWebContent] = useState("");
   const [summaryContent, setSummaryContent] = useState("");
+  
+  // UI-only source tracking
   const [currentSources, setCurrentSources] = useState<string[]>([]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -42,7 +45,7 @@ export const ChatInterface = () => {
       });
 
       if (!response.ok) throw new Error("Network response was not ok");
-      if (!response.body) return;
+      if (!response.body) return "";
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -52,7 +55,7 @@ export const ChatInterface = () => {
         const { value, done } = await reader.read();
         if (done) break;
         
-        const chunk = decoder.decode(value);
+        const chunk = decoder.decode(value, { stream: true });
         const lines = chunk.split("\n\n");
         
         for (const line of lines) {
@@ -95,24 +98,43 @@ export const ChatInterface = () => {
     setSummaryContent("");
     setCurrentSources([]);
 
+    // Local variable to accumulate sources reliably for the final message
+    const collectedSources: string[] = [];
+
     try {
       // 1. Database Stream
       const dbResult = await processStream("/stream-db", { query: userMsg.content, language: "English" }, setDbContent);
       
       // 2. Vector Stream
       setStreamStatus(prev => ({ ...prev, step: "vector" }));
-      const vectorResult = await processStream("/stream-vector", { query: userMsg.content, language: "English" }, setVectorContent, (srcs) => setCurrentSources(prev => [...prev, ...srcs]));
+      const vectorResult = await processStream(
+        "/stream-vector", 
+        { query: userMsg.content, language: "English" }, 
+        setVectorContent, 
+        (srcs) => {
+          setCurrentSources(prev => [...prev, ...srcs]);
+          collectedSources.push(...srcs); // Update local variable
+        }
+      );
 
       // 3. Web Stream
       setStreamStatus(prev => ({ ...prev, step: "web" }));
-      const webResult = await processStream("/stream-web", { query: userMsg.content, language: "English" }, setWebContent, (srcs) => setCurrentSources(prev => [...prev, ...srcs]));
+      const webResult = await processStream(
+        "/stream-web", 
+        { query: userMsg.content, language: "English" }, 
+        setWebContent, 
+        (srcs) => {
+          setCurrentSources(prev => [...prev, ...srcs]);
+          collectedSources.push(...srcs); // Update local variable
+        }
+      );
 
       // 4. Summary Stream
       setStreamStatus(prev => ({ ...prev, step: "summary" }));
       const summaryResult = await processStream("/stream-summary", { 
         user_query: userMsg.content,
         db_response: dbResult,
-        article_response: vectorResult + "\n" + webResult, // Combine for summary
+        article_response: vectorResult + "\n" + webResult, 
         language: "English"
       }, setSummaryContent);
 
@@ -120,16 +142,15 @@ export const ChatInterface = () => {
       const finalMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: summaryContent || "I couldn't generate a summary, but please check the data sources above.",
-        sources: currentSources
+        // --- CRITICAL FIX IS HERE ---
+        // We MUST use 'summaryResult' (the awaited string), NOT 'summaryContent' (the state variable).
+        content: summaryResult || "I couldn't generate a summary, but please check the data sources above.",
+        sources: collectedSources
       };
       
       setHistory(prev => [...prev, finalMsg]);
       setStreamStatus({ step: "idle", isStreaming: false });
       
-      // Clear temp buffers after moving to history (optional, or keep them for display)
-      // keeping them empty for next run logic is handled at start of function
-
     } catch (error) {
       toast.error("Failed to process request");
       setStreamStatus({ step: "idle", isStreaming: false });
@@ -166,7 +187,36 @@ export const ChatInterface = () => {
                     ? "bg-primary text-primary-foreground rounded-tr-none" 
                     : "bg-card border border-border rounded-tl-none"
                 )}>
-                   <div className="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
+                   {/* MARKDOWN RENDERER */}
+                   <div className={cn("leading-relaxed prose dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 max-w-none", msg.role === "user" ? "text-primary-foreground" : "text-foreground")}>
+                     <ReactMarkdown
+                       remarkPlugins={[remarkGfm]}
+                       components={{
+                         p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
+                         ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-2 space-y-1" {...props} />,
+                         ol: ({node, ...props}) => <ol className="list-decimal pl-5 mb-2 space-y-1" {...props} />,
+                         li: ({node, ...props}) => <li className="pl-1" {...props} />,
+                         a: ({node, ...props}) => <a className="underline underline-offset-2 font-medium hover:opacity-80" {...props} />,
+                         strong: ({node, ...props}) => <strong className="font-bold" {...props} />,
+                         h1: ({node, ...props}) => <h1 className="text-lg font-bold mt-4 mb-2" {...props} />,
+                         h2: ({node, ...props}) => <h2 className="text-base font-bold mt-3 mb-2" {...props} />,
+                         h3: ({node, ...props}) => <h3 className="text-sm font-bold mt-3 mb-1" {...props} />,
+                         code: ({node, ...props}) => <code className="bg-muted/50 px-1 py-0.5 rounded font-mono text-xs" {...props} />,
+                       }}
+                     >
+                       {msg.content}
+                     </ReactMarkdown>
+                   </div>
+
+                   {msg.sources && msg.sources.length > 0 && (
+                     <div className="mt-3 pt-3 border-t border-border/50 flex flex-wrap gap-2">
+                       {msg.sources.map((src, i) => (
+                         <span key={i} className="text-[10px] bg-black/5 dark:bg-white/10 px-2 py-1 rounded-full text-muted-foreground">
+                           {src}
+                         </span>
+                       ))}
+                     </div>
+                   )}
                 </div>
               </div>
 
@@ -186,7 +236,6 @@ export const ChatInterface = () => {
                 </Avatar>
                 <div className="flex-1 max-w-[85%] space-y-2">
                   
-                  {/* 1. Database Layer */}
                   {(streamStatus.step === "database" || dbContent) && (
                     <StreamSection 
                       title="Analyzing Structured Database" 
@@ -196,17 +245,16 @@ export const ChatInterface = () => {
                     />
                   )}
 
-                  {/* 2. Vector Layer */}
                   {(streamStatus.step === "vector" || vectorContent) && (
                     <StreamSection 
                       title="Retrieving Internal Documents" 
                       content={vectorContent} 
                       type="vector" 
                       status={streamStatus.step === "vector" ? "streaming" : (vectorContent ? "completed" : "pending")} 
+                      sources={currentSources}
                     />
                   )}
 
-                  {/* 3. Web Layer */}
                   {(streamStatus.step === "web" || webContent) && (
                     <StreamSection 
                       title="Scanning Live Web Data" 
@@ -216,12 +264,25 @@ export const ChatInterface = () => {
                     />
                   )}
                   
-                  {/* 4. Summary Generation (The 'Assistant' typing bubble) */}
                   {streamStatus.step === "summary" && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground animate-pulse">
                       <Brain className="w-4 h-4" />
                       <span>Synthesizing insights...</span>
-                      <div className="whitespace-pre-wrap mt-2 text-foreground bg-card p-4 rounded-lg border">{summaryContent}</div>
+                      {summaryContent && (
+                        <div className="mt-2 text-foreground bg-card p-4 rounded-lg border w-full">
+                          <ReactMarkdown 
+                             remarkPlugins={[remarkGfm]}
+                             components={{
+                               p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
+                               ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-2" {...props} />,
+                               li: ({node, ...props}) => <li className="pl-1" {...props} />,
+                               strong: ({node, ...props}) => <strong className="font-bold" {...props} />,
+                             }}
+                          >
+                            {summaryContent}
+                          </ReactMarkdown>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
