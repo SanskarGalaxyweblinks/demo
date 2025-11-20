@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ChevronDown, ChevronRight, Database, Globe, FileText, CheckCircle2, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface StreamSectionProps {
   title: string;
@@ -15,7 +17,7 @@ export const StreamSection = ({ title, content, type, status, sources }: StreamS
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Auto-expand while streaming, collapse on complete
-  React.useEffect(() => {
+  useEffect(() => {
     if (status === "streaming") setIsExpanded(true);
     if (status === "completed") setIsExpanded(false);
   }, [status]);
@@ -29,7 +31,7 @@ export const StreamSection = ({ title, content, type, status, sources }: StreamS
   };
 
   return (
-    <div className="mb-3">
+    <div className="mb-3 w-full">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
@@ -53,8 +55,19 @@ export const StreamSection = ({ title, content, type, status, sources }: StreamS
 
       {isExpanded && content && (
         <div className="mt-2 pl-2 border-l-2 border-border ml-2 animate-in slide-in-from-top-2 duration-200">
-          <Card className="p-3 bg-card/50 text-xs font-mono text-muted-foreground whitespace-pre-wrap shadow-none">
-            {content}
+          <Card className="p-3 bg-card/50 text-xs text-muted-foreground shadow-none overflow-hidden">
+             {/* Markdown Rendering for proper formatting */}
+             <div className="prose prose-xs dark:prose-invert max-w-none break-words">
+               <ReactMarkdown 
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    pre: ({node, ...props}) => <pre className="overflow-auto my-2 bg-muted p-2 rounded" {...props} />,
+                    code: ({node, ...props}) => <code className="bg-muted px-1 py-0.5 rounded font-mono" {...props} />
+                  }}
+               >
+                 {content}
+               </ReactMarkdown>
+             </div>
           </Card>
           {sources && sources.length > 0 && (
              <div className="mt-2 flex flex-wrap gap-1">
@@ -70,4 +83,3 @@ export const StreamSection = ({ title, content, type, status, sources }: StreamS
     </div>
   );
 };
-import React from 'react';

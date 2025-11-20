@@ -24,8 +24,6 @@ export const ChatInterface = () => {
   const [vectorContent, setVectorContent] = useState("");
   const [webContent, setWebContent] = useState("");
   const [summaryContent, setSummaryContent] = useState("");
-  
-  // UI-only source tracking
   const [currentSources, setCurrentSources] = useState<string[]>([]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -98,7 +96,6 @@ export const ChatInterface = () => {
     setSummaryContent("");
     setCurrentSources([]);
 
-    // Local variable to accumulate sources reliably for the final message
     const collectedSources: string[] = [];
 
     try {
@@ -113,7 +110,7 @@ export const ChatInterface = () => {
         setVectorContent, 
         (srcs) => {
           setCurrentSources(prev => [...prev, ...srcs]);
-          collectedSources.push(...srcs); // Update local variable
+          collectedSources.push(...srcs);
         }
       );
 
@@ -125,7 +122,7 @@ export const ChatInterface = () => {
         setWebContent, 
         (srcs) => {
           setCurrentSources(prev => [...prev, ...srcs]);
-          collectedSources.push(...srcs); // Update local variable
+          collectedSources.push(...srcs);
         }
       );
 
@@ -142,10 +139,14 @@ export const ChatInterface = () => {
       const finalMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        // --- CRITICAL FIX IS HERE ---
-        // We MUST use 'summaryResult' (the awaited string), NOT 'summaryContent' (the state variable).
         content: summaryResult || "I couldn't generate a summary, but please check the data sources above.",
-        sources: collectedSources
+        sources: collectedSources,
+        // PERSIST THE THINKING STEPS HERE
+        thoughts: {
+          database: dbResult,
+          vector: vectorResult,
+          web: webResult
+        }
       };
       
       setHistory(prev => [...prev, finalMsg]);
@@ -174,15 +175,31 @@ export const ChatInterface = () => {
           {history.map((msg) => (
             <div key={msg.id} className={cn("flex gap-4", msg.role === "user" ? "justify-end" : "justify-start")}>
               {msg.role !== "user" && (
-                <Avatar className="w-8 h-8 border border-border bg-accent/10">
+                <Avatar className="w-8 h-8 border border-border bg-accent/10 flex-shrink-0">
                   <AvatarImage src="/jupiter-logo.png" />
                   <AvatarFallback><Brain className="w-4 h-4 text-accent" /></AvatarFallback>
                 </Avatar>
               )}
               
-              <div className={cn("max-w-[85%]", msg.role === "user" ? "items-end" : "items-start")}>
+              <div className={cn("max-w-[85%] flex flex-col gap-2", msg.role === "user" ? "items-end" : "items-start")}>
+                
+                {/* RENDER PERSISTED THINKING COMPONENT */}
+                {msg.role === "assistant" && msg.thoughts && (
+                  <div className="w-full mb-2 space-y-2">
+                    {msg.thoughts.database && (
+                      <StreamSection title="Analyzed Structured Database" content={msg.thoughts.database} type="database" status="completed" />
+                    )}
+                    {msg.thoughts.vector && (
+                      <StreamSection title="Retrieved Internal Documents" content={msg.thoughts.vector} type="vector" status="completed" sources={msg.sources} />
+                    )}
+                    {msg.thoughts.web && (
+                      <StreamSection title="Scanned Web Data" content={msg.thoughts.web} type="web" status="completed" />
+                    )}
+                  </div>
+                )}
+
                 <div className={cn(
-                  "p-4 rounded-2xl text-sm shadow-sm",
+                  "p-4 rounded-2xl text-sm shadow-sm w-full",
                   msg.role === "user" 
                     ? "bg-primary text-primary-foreground rounded-tr-none" 
                     : "bg-card border border-border rounded-tl-none"
@@ -228,10 +245,10 @@ export const ChatInterface = () => {
             </div>
           ))}
 
-          {/* Streaming State Visualization */}
+          {/* LIVE Streaming State Visualization (Only appears while generating) */}
           {streamStatus.isStreaming && (
             <div className="flex gap-4">
-               <Avatar className="w-8 h-8 border border-border bg-accent/10">
+               <Avatar className="w-8 h-8 border border-border bg-accent/10 flex-shrink-0">
                   <AvatarFallback><Brain className="w-4 h-4 text-accent" /></AvatarFallback>
                 </Avatar>
                 <div className="flex-1 max-w-[85%] space-y-2">
