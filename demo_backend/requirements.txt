@@ -15,17 +15,23 @@ pymupdf
 json_repair
 fastapi-mail>=1.4.1
 
-# NEW: Real Groq API Integration
+# Real Groq API Integration
 groq>=0.4.0
 
-# NEW: Document Processing (OCR + PDF)
+# Document Processing (OCR + PDF)
 PyMuPDF>=1.23.0
 pytesseract>=0.3.10
 Pillow>=9.5.0
 
-# NEW: Enhanced JSON handling
+# Enhanced JSON handling
 jsonschema>=4.0.0
 
-# NEW: Image processing for tamper detection
+# Image processing for tamper detection
 opencv-python>=4.8.0
 numpy>=1.24.0
+
+# NEW: Odoo ERP Integration
+requests>=2.31.0
+
+# Text processing for email classification
+textblob>=0.17.1
