@@ -70,9 +70,9 @@ const Models = () => {
               <Info className="w-4 h-4 mr-2" />
               Instructions
             </Button>
-            <Button variant="outline" onClick={() => navigate("/dashboard")}>
+            <Button variant="outline" onClick={() => window.open("http://3.6.198.245:8089", "_blank")}>
               <Database className="w-4 h-4 mr-2" />
-              ERP Dashboard
+              Live Odoo ERP
             </Button>
             <Button variant="outline" onClick={handleSignOut}>
               <LogOut className="w-4 h-4 mr-2" />
@@ -202,8 +202,8 @@ const Models = () => {
                 <Button variant="outline" onClick={() => navigate("/instructions")}>
                   View Instructions
                 </Button>
-                <Button variant="outline" onClick={() => navigate("/dashboard")}>
-                  Live Dashboard
+                <Button variant="outline" onClick={() => window.open("http://3.6.198.245:8089", "_blank")}>
+                  Live Odoo ERP
                 </Button>
               </div>
             </div>

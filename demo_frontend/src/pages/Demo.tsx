@@ -91,7 +91,7 @@ const Demo = () => {
             Back to Models Overview
           </Button>
           <div className="text-sm text-muted-foreground">
-            Or view the <Button variant="link" onClick={() => navigate("/dashboard")} className="p-0 h-auto">ERP Dashboard</Button> to see processed data
+            Or view the <Button variant="link" onClick={() => window.open("http://3.6.198.245:8089", "_blank")} className="p-0 h-auto">Live Odoo ERP</Button> to see processed data
           </div>
         </div>
       </div>

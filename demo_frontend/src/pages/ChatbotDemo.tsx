@@ -23,8 +23,8 @@ const ChatbotDemo = () => {
               <span className="text-sm font-medium text-foreground">JupiterBrains Chat Lens</span>
             </div>
           </div>
-          <Button variant="outline" onClick={() => navigate("/dashboard")}>
-            <Database className="w-4 h-4 mr-2" />
+          <Button variant="outline" onClick={() => window.open("http://3.6.198.245:8089", "_blank")}>
+          <Database className="w-4 h-4 mr-2" />
             ERP Dashboard
           </Button>
         </div>
