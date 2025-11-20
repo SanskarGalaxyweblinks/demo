@@ -80,6 +80,28 @@ export interface CreateCustomerRequest {
   verification_status?: string;
 }
 
+// NEW: ERP Sync Types
+export interface ErpSyncRequest {
+  customerName: string;
+  orderAmount: number;
+  currency: string;
+}
+
+export interface ErpSyncResponse {
+  recordId: string;
+  status: string;
+  synced: boolean;
+  timestamp: string;
+  odooCustomerId?: number;
+  odooLeadId?: number;
+  payload?: {
+    customerName: string;
+    orderAmount: number;
+    currency: string;
+  };
+  error?: string;
+}
+
 // Complete KYC workflow request/response types
 export interface KYCWorkflowRequest {
   subject: string;
@@ -220,7 +242,15 @@ export const documentAPI = {
 
 // ERP/Customer Management API
 export const erpAPI = {
-  async getCustomers(token?: string): Promise<CustomerRecord[]> {
+  // NEW: Odoo ERP Sync
+  async syncToErp(data: ErpSyncRequest, token?: string): Promise<ErpSyncResponse> {
+    return fetchWithAuth("/erp/sync", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }, token);
+  },
+
+  async getCustomers(token?: string): Promise<{ customers: any[], total: number }> {
     return fetchWithAuth("/erp/customers", {
       method: "GET",
     }, token);
@@ -247,12 +277,39 @@ export const erpAPI = {
 
   async getStats(token?: string): Promise<{
     total_customers: number;
-    onboarded: number;
-    pending: number;
-    rejected: number;
+    recent_customers?: number;
+    odoo_connection?: string;
+    last_sync?: string;
+    error?: string;
   }> {
     return fetchWithAuth("/erp/stats", {
       method: "GET",
+    }, token);
+  },
+
+  // NEW: ERP Health Check
+  async healthCheck(): Promise<{
+    status: string;
+    odoo_connection: string;
+    database?: string;
+    message: string;
+    error?: string;
+  }> {
+    return fetchWithAuth("/erp/health", {
+      method: "GET",
+    });
+  },
+
+  // NEW: KYC Record Creation in Odoo
+  async createKycRecord(data: {
+    customer_name: string;
+    customer_email: string;
+    document_types: string[];
+    extraction_data: any;
+  }, token?: string): Promise<any> {
+    return fetchWithAuth("/erp/kyc", {
+      method: "POST",
+      body: JSON.stringify(data),
     }, token);
   },
 };

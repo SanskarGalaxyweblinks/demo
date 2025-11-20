@@ -25,7 +25,7 @@ async def process_complete_kyc(
     1. Email classification (Onboarding/Dispute/Other)
     2. Document analysis (if attachments provided) 
     3. Tamper detection (if attachments provided)
-    4. ERP integration (customer record creation)
+    4. Odoo ERP integration (real customer record creation)
     
     This is the main endpoint used by the frontend complete workflow demo.
     """
@@ -53,7 +53,7 @@ async def process_complete_kyc(
             attachments=attachments or []
         )
         
-        # Process the complete workflow
+        # Process the complete workflow WITH ODOO INTEGRATION
         result = await process_complete_kyc_workflow(
             request=workflow_request,
             user=user,
@@ -76,8 +76,8 @@ async def kyc_health_check():
     """Health check for KYC workflow service"""
     return {
         "status": "healthy",
-        "service": "KYC Complete Workflow",
+        "service": "KYC Complete Workflow with Odoo",
         "endpoints": [
-            "POST /kyc/process-complete - Complete KYC automation workflow"
+            "POST /kyc/process-complete - Complete KYC automation workflow with real Odoo ERP"
         ]
     }

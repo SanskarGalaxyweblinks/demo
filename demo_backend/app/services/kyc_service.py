@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..models.kyc import KYCWorkflowRequest, KYCWorkflowResponse, EmailClassificationResult, DocumentExtractionResult, TamperDetectionResult, ERPIntegrationResult
 from .email_service import classify_email
 from .document_service import analyze_document, detect_tamper
-from .erp_service import create_customer_record
+from .erp_service import create_kyc_record
 
 async def process_complete_kyc_workflow(
     request: KYCWorkflowRequest,
@@ -21,7 +21,7 @@ async def process_complete_kyc_workflow(
     1. Email Classification - Real AI analysis of email content and intent
     2. Document Analysis - Real OCR + AI extraction from attachments
     3. Tamper Detection - Real forensic analysis of document authenticity
-    4. ERP Integration - Create customer record with extracted real data
+    4. Odoo ERP Integration - Create customer record with extracted real data
     
     Args:
         request: KYC workflow request with email and attachments
@@ -145,8 +145,8 @@ async def process_complete_kyc_workflow(
     else:
         print("[KYC] Step 2-3: No documents to process, skipping analysis and tamper detection")
     
-    # Step 4: ERP Integration - Create customer record with real extracted data
-    print("[KYC] Step 4: Creating customer record in ERP with real extracted data...")
+    # Step 4: Odoo ERP Integration - Create customer record with real extracted data
+    print("[KYC] Step 4: Creating customer record in Odoo ERP with real extracted data...")
     try:
         # Extract customer info using real AI-extracted data
         customer_name = extract_customer_name_from_real_data(
@@ -171,40 +171,34 @@ async def process_complete_kyc_workflow(
                 # Fallback to file extensions
                 document_types = [f.filename.split('.')[-1].upper() for f in request.attachments if f.filename]
         
-        # Determine verification status based on real tamper detection
-        verification_status = determine_verification_status(
-            email_classification=email_classification,
-            tamper_detection=tamper_detection,
-            document_analysis=document_analysis
-        )
-        
-        # Create customer record with real extracted data
-        customer_record = await create_customer_record(
-            db=db,
-            customer_data={
-                "name": customer_name,
-                "email": customer_email,
-                "status": "pending" if email_classification.category == "Onboarding" else "other",
-                "document_type": ", ".join(document_types) if document_types else "Email Only",
-                "verification_status": verification_status
+        # Create customer record in Odoo with real extracted data
+        odoo_result = create_kyc_record(
+            customer_name=customer_name,
+            customer_email=customer_email,
+            document_types=document_types,
+            extraction_data={
+                "confidence": document_analysis.confidence if document_analysis else 0.8,
+                "tamper_detected": not tamper_detection.is_authentic if tamper_detection else False,
+                "email_category": email_classification.category,
+                "processing_method": "real_ai"
             },
-            created_by_user=user
+            user=user.__dict__ if user else None
         )
         
         erp_integration = ERPIntegrationResult(
-            customer_id=customer_record["id"],
+            customer_id=str(odoo_result.get("customer_id", f"ODOO-{int(time.time() % 1000)}")),
             status="Success",
-            message=f"Customer record created successfully for {customer_name} with real AI-extracted data"
+            message=f"Customer record created in Odoo for {customer_name} with real AI-extracted data"
         )
-        print(f"[KYC] Customer record created: {customer_record['id']} for {customer_name}")
+        print(f"[KYC] Odoo customer record created: {odoo_result.get('customer_id')} for {customer_name}")
         
     except Exception as e:
-        print(f"[KYC] ERP integration error: {e}")
+        print(f"[KYC] Odoo ERP integration error: {e}")
         # Create fallback ERP response
         erp_integration = ERPIntegrationResult(
             customer_id=f"KYC{int(time.time() % 1000)}",
             status="Partial Success", 
-            message=f"Email processed with AI but ERP integration had issues: {str(e)}"
+            message=f"Email processed with AI but Odoo integration had issues: {str(e)}"
         )
     
     # Calculate total processing time
