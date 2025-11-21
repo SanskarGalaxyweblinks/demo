@@ -6,10 +6,21 @@ from typing import Any, Dict, List, Optional
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models.kyc import KYCWorkflowRequest, KYCWorkflowResponse, EmailClassificationResult, DocumentExtractionResult, TamperDetectionResult, ERPIntegrationResult
+from ..models.kyc import (
+    KYCWorkflowRequest, 
+    KYCWorkflowResponse, 
+    EmailClassificationResult, 
+    DocumentExtractionResult, 
+    TamperDetectionResult, 
+    ERPIntegrationResult
+)
 from .email_service import classify_email
 from .document_service import analyze_document, detect_tamper
-from .erp_service import create_kyc_record
+from .erp_service import (
+    create_kyc_record,
+    create_kyc_processing_record,
+    create_customer_in_odoo
+)
 
 async def process_complete_kyc_workflow(
     request: KYCWorkflowRequest,
@@ -17,11 +28,12 @@ async def process_complete_kyc_workflow(
     db: AsyncSession
 ) -> KYCWorkflowResponse:
     """
-    Orchestrate the complete KYC workflow using real Groq AI:
+    Orchestrate the complete KYC workflow using real Groq AI with enhanced data storage:
     1. Email Classification - Real AI analysis of email content and intent
     2. Document Analysis - Real OCR + AI extraction from attachments
     3. Tamper Detection - Real forensic analysis of document authenticity
-    4. Odoo ERP Integration - Create customer record with extracted real data
+    4. Custom Odoo Storage - Store all AI processing results in custom models
+    5. Customer Creation - Create customer record with extracted real data
     
     Args:
         request: KYC workflow request with email and attachments
@@ -145,23 +157,90 @@ async def process_complete_kyc_workflow(
     else:
         print("[KYC] Step 2-3: No documents to process, skipping analysis and tamper detection")
     
-    # Step 4: Odoo ERP Integration - Create customer record with real extracted data
+    # Step 4: Extract customer information from AI processing results
+    customer_name = extract_customer_name_from_real_data(
+        subject=request.subject,
+        body=request.body,
+        document_analysis=document_analysis,
+        email_classification=email_classification
+    )
+    
+    customer_email = extract_customer_email_from_real_data(
+        body=request.body,
+        user=user,
+        document_analysis=document_analysis
+    )
+    
+    # Step 5: Create customer record in Odoo
     print("[KYC] Step 4: Creating customer record in Odoo ERP with real extracted data...")
+    customer_id = None
     try:
-        # Extract customer info using real AI-extracted data
-        customer_name = extract_customer_name_from_real_data(
-            subject=request.subject,
-            body=request.body,
-            document_analysis=document_analysis,
-            email_classification=email_classification
-        )
+        customer_id = create_customer_in_odoo(customer_name, customer_email)
+        print(f"[KYC] Customer record created with ID: {customer_id}")
+    except Exception as e:
+        print(f"[KYC] Customer creation error: {e}")
+    
+    # Step 6: Store complete AI processing results in custom Odoo model
+    print("[KYC] Step 5: Storing complete AI processing results in custom Odoo models...")
+    processing_record_id = None
+    try:
+        if customer_id:
+            # Prepare complete processing data for storage
+            email_data = {
+                "customer_name": customer_name,
+                "category": email_classification.category,
+                "priority": email_classification.priority,
+                "sentiment": email_classification.sentiment,
+                "confidence": email_classification.confidence,
+                "tags": email_classification.tags,
+                "reasoning": email_classification.reasoning,
+                "subject": request.subject[:100],  # Truncate for storage
+                "processing_timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+            }
+            
+            # Prepare document data (if available)
+            doc_data = None
+            if document_analysis:
+                doc_data = {
+                    "document_type": document_analysis.document_type,
+                    "page_count": document_analysis.page_count,
+                    "entities": document_analysis.entities,
+                    "detected_currency": document_analysis.detected_currency,
+                    "confidence": document_analysis.confidence,
+                    "preview": document_analysis.preview,
+                    "extracted_data": document_analysis.extracted_data,
+                    "processing_time": document_analysis.processing_time
+                }
+            
+            # Prepare tamper detection data (if available)
+            tamper_data = None
+            if tamper_detection:
+                tamper_data = {
+                    "is_authentic": tamper_detection.is_authentic,
+                    "confidence_score": tamper_detection.confidence_score,
+                    "detected_issues": tamper_detection.detected_issues,
+                    "risk_level": tamper_detection.risk_level,
+                    "analysis_details": tamper_detection.analysis_details,
+                    "processing_time": tamper_detection.processing_time
+                }
+            
+            # Store in custom Odoo model
+            user_email = get_user_email(user)
+            processing_record_id = create_kyc_processing_record(
+                customer_id=customer_id,
+                user_email=user_email,
+                email_data=email_data,
+                document_data=doc_data,
+                tamper_data=tamper_data
+            )
+            
+            print(f"[KYC] AI processing results stored in Odoo record: {processing_record_id}")
         
-        customer_email = extract_customer_email_from_real_data(
-            body=request.body,
-            user=user,
-            document_analysis=document_analysis
-        )
-        
+    except Exception as e:
+        print(f"[KYC] Error storing AI processing results: {e}")
+    
+    # Step 7: Create traditional KYC record for backward compatibility
+    try:
         # Determine document types from real file analysis
         document_types = []
         if request.attachments:
@@ -171,34 +250,35 @@ async def process_complete_kyc_workflow(
                 # Fallback to file extensions
                 document_types = [f.filename.split('.')[-1].upper() for f in request.attachments if f.filename]
         
-        # Create customer record in Odoo with real extracted data
+        # Create traditional KYC record
+        extraction_data = prepare_extraction_data_for_legacy_system(
+            email_classification=email_classification,
+            document_analysis=document_analysis,
+            tamper_detection=tamper_detection
+        )
+        
         odoo_result = create_kyc_record(
             customer_name=customer_name,
             customer_email=customer_email,
             document_types=document_types,
-            extraction_data={
-                "confidence": document_analysis.confidence if document_analysis else 0.8,
-                "tamper_detected": not tamper_detection.is_authentic if tamper_detection else False,
-                "email_category": email_classification.category,
-                "processing_method": "real_ai"
-            },
+            extraction_data=extraction_data,
             user=user.__dict__ if user else None
         )
         
         erp_integration = ERPIntegrationResult(
-            customer_id=str(odoo_result.get("customer_id", f"ODOO-{int(time.time() % 1000)}")),
+            customer_id=str(odoo_result.get("customer_id", customer_id)),
             status="Success",
-            message=f"Customer record created in Odoo for {customer_name} with real AI-extracted data"
+            message=f"Complete AI processing results stored for {customer_name} - Customer ID: {customer_id}, Processing Record: {processing_record_id}"
         )
-        print(f"[KYC] Odoo customer record created: {odoo_result.get('customer_id')} for {customer_name}")
+        print(f"[KYC] Complete workflow integration successful")
         
     except Exception as e:
-        print(f"[KYC] Odoo ERP integration error: {e}")
+        print(f"[KYC] Legacy KYC record creation error: {e}")
         # Create fallback ERP response
         erp_integration = ERPIntegrationResult(
-            customer_id=f"KYC{int(time.time() % 1000)}",
+            customer_id=str(customer_id) if customer_id else f"KYC{int(time.time() % 1000)}",
             status="Partial Success", 
-            message=f"Email processed with AI but Odoo integration had issues: {str(e)}"
+            message=f"AI processing completed but some storage operations failed: {str(e)}"
         )
     
     # Calculate total processing time
@@ -303,6 +383,53 @@ def extract_customer_email_from_real_data(
     print("[KYC] Unable to extract customer email, using fallback")
     return "customer@unknown.com"
 
+def get_user_email(user: Any) -> str:
+    """Extract user email for record attribution"""
+    if user:
+        if hasattr(user, 'email') and user.email:
+            return user.email
+        elif isinstance(user, dict) and user.get('email'):
+            return user['email']
+    return "system@demo.com"
+
+def prepare_extraction_data_for_legacy_system(
+    email_classification: EmailClassificationResult,
+    document_analysis: Optional[DocumentExtractionResult],
+    tamper_detection: Optional[TamperDetectionResult]
+) -> Dict[str, Any]:
+    """Prepare comprehensive extraction data for legacy KYC system"""
+    
+    extraction_data = {
+        "confidence": email_classification.confidence,
+        "email_category": email_classification.category,
+        "email_priority": email_classification.priority,
+        "email_sentiment": email_classification.sentiment,
+        "email_tags": email_classification.tags,
+        "processing_method": "enhanced_ai_pipeline"
+    }
+    
+    # Add document analysis data if available
+    if document_analysis:
+        extraction_data.update({
+            "document_confidence": document_analysis.confidence,
+            "document_type": document_analysis.document_type,
+            "document_entities": document_analysis.entities,
+            "document_analysis": document_analysis.extracted_data,
+            "document_processing_time": document_analysis.processing_time
+        })
+    
+    # Add tamper detection data if available
+    if tamper_detection:
+        extraction_data.update({
+            "tamper_detected": not tamper_detection.is_authentic,
+            "tamper_confidence": tamper_detection.confidence_score,
+            "tamper_risk_level": tamper_detection.risk_level,
+            "tamper_issues": tamper_detection.detected_issues,
+            "tamper_analysis": tamper_detection.analysis_details
+        })
+    
+    return extraction_data
+
 def determine_verification_status(
     email_classification: EmailClassificationResult,
     tamper_detection: Optional[TamperDetectionResult],
@@ -328,3 +455,26 @@ def determine_verification_status(
     
     # Default for normal processing
     return "pending"
+
+def calculate_overall_confidence(
+    email_classification: EmailClassificationResult,
+    document_analysis: Optional[DocumentExtractionResult],
+    tamper_detection: Optional[TamperDetectionResult]
+) -> float:
+    """Calculate overall confidence score from all AI processing components"""
+    
+    scores = [email_classification.confidence]
+    
+    if document_analysis:
+        scores.append(document_analysis.confidence)
+    
+    if tamper_detection:
+        scores.append(tamper_detection.confidence_score)
+    
+    # Weighted average with email classification being most important
+    if len(scores) == 1:
+        return scores[0]
+    elif len(scores) == 2:
+        return (scores[0] * 0.6 + scores[1] * 0.4)
+    else:  # All three components
+        return (scores[0] * 0.4 + scores[1] * 0.35 + scores[2] * 0.25)

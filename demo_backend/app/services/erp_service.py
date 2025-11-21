@@ -1,10 +1,10 @@
-# demo_backend/app/services/erp_service.py
 from __future__ import annotations
 
 import requests
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
+import json
 
 class OdooClient:
     def __init__(self):
@@ -69,8 +69,12 @@ class OdooClient:
                 cookies={'session_id': self.session_id}
             )
             
+            print(f"[ODOO] Response status: {response.status_code}")
+            
             if response.status_code == 200:
                 result = response.json()
+                print(f"[ODOO] JSON result: {result}")
+                
                 if result.get('result'):
                     record_id = result['result']
                     print(f"[ODOO] ✅ Created {model} record ID: {record_id}")
@@ -78,7 +82,12 @@ class OdooClient:
                 elif result.get('error'):
                     print(f"[ODOO] ❌ API Error: {result['error']}")
                     return None
-            return None
+                else:
+                    print(f"[ODOO] ❌ No result in response: {result}")
+                    return None
+            else:
+                print(f"[ODOO] ❌ HTTP Error {response.status_code}: {response.text}")
+                return None
         except Exception as e:
             print(f"[ODOO] ❌ Exception creating {model}: {e}")
             return None
@@ -110,31 +119,68 @@ class OdooClient:
         except Exception as e:
             print(f"Search records failed: {e}")
             return []
+    
+    def update_record(self, model: str, record_id: int, data: Dict[str, Any]) -> bool:
+        """Update record in Odoo"""
+        if not self.uid:
+            if not self.authenticate():
+                return False
+                
+        try:
+            response = requests.post(f"{self.url}/web/dataset/call_kw",
+                json={
+                    'params': {
+                        'model': model,
+                        'method': 'write',
+                        'args': [[record_id], data],
+                        'kwargs': {}
+                    }
+                },
+                cookies={'session_id': self.session_id}
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                return result.get('result', False)
+            return False
+        except Exception as e:
+            print(f"Update record failed: {e}")
+            return False
+    
+    def delete_record(self, model: str, record_id: int) -> bool:
+        """Delete record in Odoo"""
+        if not self.uid:
+            if not self.authenticate():
+                return False
+                
+        try:
+            response = requests.post(f"{self.url}/web/dataset/call_kw",
+                json={
+                    'params': {
+                        'model': model,
+                        'method': 'unlink',
+                        'args': [[record_id]],
+                        'kwargs': {}
+                    }
+                },
+                cookies={'session_id': self.session_id}
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                return result.get('result', False)
+            return False
+        except Exception as e:
+            print(f"Delete record failed: {e}")
+            return False
 
 # Global Odoo client instance
 _odoo_client = OdooClient()
 
-def find_customer_by_email(email: str) -> Optional[int]:
-    """Find an existing customer in Odoo by email"""
-    if not email:
-        return None
-    
-    print(f"[ERP] Searching for customer with email: {email}")
-    # Search for partner with this email
-    # Note: 'ilike' is case-insensitive search in Odoo
-    domain = [['email', '=', email]] 
-    records = _odoo_client.search_records('res.partner', domain=domain, fields=['id', 'name'])
-    
-    if records and len(records) > 0:
-        customer_id = records[0]['id']
-        print(f"[ERP] ✅ Found existing customer: {records[0]['name']} (ID: {customer_id})")
-        return customer_id
-        
-    print(f"[ERP] ⚠️ Customer not found for email: {email}")
-    return None
+# =================== BASIC CUSTOMER CREATION ===================
 
 def create_customer_in_odoo(name: str, email: str = None) -> Optional[int]:
-    """Create customer in Odoo CRM - used during Signup"""
+    """Create customer in Odoo CRM - using only basic fields"""
     data = {
         'name': name,
         'is_company': False
@@ -147,96 +193,160 @@ def create_customer_in_odoo(name: str, email: str = None) -> Optional[int]:
     print(f"[ERP] Contact creation result: {result}")
     return result
 
-def create_helpdesk_ticket_in_odoo(customer_id: int, subject: str, description: str) -> Optional[int]:
-    """Create helpdesk ticket in Odoo using proper field structure"""
-    data = {
-        'name': subject,
-        'description': description,
-        'partner_id': customer_id,
-        'priority': '1'
+# =================== KYC DATA MANAGEMENT USING FREE MODELS ===================
+
+def create_kyc_processing_record(
+    customer_id: int,
+    user_email: str,
+    email_data: Dict[str, Any],
+    document_data: Optional[Dict[str, Any]] = None,
+    tamper_data: Optional[Dict[str, Any]] = None
+) -> Optional[int]:
+    """Create KYC processing record using crm.lead model (FREE)"""
+    
+    # Prepare processing summary
+    processing_summary = {
+        "email_classification": email_data,
+        "document_analysis": document_data,
+        "tamper_detection": tamper_data,
+        "processing_timestamp": datetime.utcnow().isoformat(),
+        "processed_by": user_email
     }
-    print(f"[ERP] Creating helpdesk ticket: {subject}")
-    result = _odoo_client.create_record('helpdesk.ticket', data)
+    
+    # Create lead record to store KYC data
+    lead_data = {
+        'name': f"KYC Processing - {email_data.get('customer_name', 'Unknown')}",
+        'partner_id': customer_id,
+        'type': 'opportunity',  # Use as KYC tracking
+        'description': json.dumps(processing_summary, indent=2),  # Store all AI results
+        'expected_revenue': 0,  # Not used for KYC
+        'stage_id': 1,  # Default stage
+        # Custom fields using available fields
+        'email_from': user_email,
+        'phone': email_data.get('confidence', 0) * 100,  # Store confidence as "phone" number
+    }
+    
+    print(f"[KYC] Creating KYC processing record for customer {customer_id}")
+    result = _odoo_client.create_record('crm.lead', lead_data)
+    print(f"[KYC] KYC record creation result: {result}")
     return result
 
-def create_project_task_in_odoo(customer_id: int, task_name: str, description: str) -> Optional[int]:
-    """Create project task in Odoo using proper field structure"""
-    data = {
-        'name': task_name,
-        'partner_id': customer_id,
-        'description': description,
-    }
-    print(f"[ERP] Creating project task: {task_name}")
-    result = _odoo_client.create_record('project.task', data)
-    return result
-
-def create_support_ticket_in_odoo(customer_id: int, subject: str, description: str) -> Optional[int]:
-    """
-    Create support ticket in Odoo linked to an EXISTING customer ID.
-    Tries helpdesk first, then project task.
-    """
-    if not customer_id:
-        print("[ERP] ❌ Cannot create ticket: No customer ID provided")
-        return None
-    
-    # Try helpdesk.ticket first
-    ticket_id = create_helpdesk_ticket_in_odoo(customer_id, subject, description)
-    
-    if not ticket_id:
-        print(f"[ERP] Helpdesk module not available, trying project.task")
-        ticket_id = create_project_task_in_odoo(customer_id, subject, description)
+def get_user_kyc_records(user_email: str) -> List[Dict[str, Any]]:
+    """Get all KYC processing records for a user"""
+    try:
+        # Search for leads created by this user (KYC records)
+        domain = [
+            ('email_from', '=', user_email),
+            ('name', 'like', 'KYC Processing')
+        ]
         
-    if not ticket_id:
-        print(f"[ERP] ❌ Failed to create ticket or task in Odoo")
-        return None
-    
-    print(f"[ERP] Support ticket/task creation result: {ticket_id}")
-    return ticket_id
-
-def create_sales_lead_in_odoo(customer_name: str, opportunity_name: str, amount: float = 0) -> Optional[int]:
-    """Create sales lead in Odoo CRM (Legacy/ERP Demo)"""
-    # NOTE: For the ERP Demo, we still might create a customer if one doesn't exist,
-    # or we could refactor this to search as well. Keeping as is for now unless requested.
-    customer_id = create_customer_in_odoo(customer_name)
-    if not customer_id:
-        return None
+        fields = [
+            'id', 'name', 'partner_id', 'description', 'create_date', 
+            'phone', 'email_from', 'stage_id'
+        ]
         
-    data = {
-        'name': opportunity_name,
-        'partner_id': customer_id,
-        'expected_revenue': amount
-    }
-    return _odoo_client.create_record('crm.lead', data)
+        records = _odoo_client.search_records('crm.lead', domain=domain, fields=fields)
+        
+        processed_records = []
+        for record in records:
+            try:
+                # Parse the stored AI processing data
+                processing_data = json.loads(record.get('description', '{}'))
+                
+                processed_record = {
+                    'id': record['id'],
+                    'customer_name': processing_data.get('email_classification', {}).get('customer_name', 'Unknown'),
+                    'email_classification': processing_data.get('email_classification'),
+                    'document_analysis': processing_data.get('document_analysis'),
+                    'tamper_detection': processing_data.get('tamper_detection'),
+                    'processing_timestamp': processing_data.get('processing_timestamp'),
+                    'processed_by': processing_data.get('processed_by'),
+                    'confidence_score': record.get('phone', 0) / 100 if record.get('phone') else 0,
+                    'odoo_customer_id': record.get('partner_id', [None])[0] if record.get('partner_id') else None,
+                    'created_date': record.get('create_date'),
+                }
+                processed_records.append(processed_record)
+                
+            except json.JSONDecodeError:
+                # Handle records with invalid JSON
+                processed_record = {
+                    'id': record['id'],
+                    'customer_name': 'Data Error',
+                    'error': 'Invalid processing data format'
+                }
+                processed_records.append(processed_record)
+        
+        return processed_records
+        
+    except Exception as e:
+        print(f"[KYC] Error fetching user records: {e}")
+        return []
 
-async def get_customer_records(db: AsyncSession) -> List[Dict[str, Any]]:
-    """Get customer records from Odoo"""
-    records = _odoo_client.search_records('res.partner', 
-        domain=[], 
-        fields=['name', 'email', 'create_date']
-    )
-    return records
+def delete_user_kyc_record(record_id: int, user_email: str) -> bool:
+    """Delete a KYC record (only if it belongs to the user)"""
+    try:
+        # First verify the record belongs to this user
+        domain = [
+            ('id', '=', record_id),
+            ('email_from', '=', user_email),
+            ('name', 'like', 'KYC Processing')
+        ]
+        
+        records = _odoo_client.search_records('crm.lead', domain=domain, fields=['id'])
+        
+        if not records:
+            print(f"[KYC] Record {record_id} not found or doesn't belong to user {user_email}")
+            return False
+        
+        # Delete the record
+        success = _odoo_client.delete_record('crm.lead', record_id)
+        
+        if success:
+            print(f"[KYC] ✅ Deleted KYC record {record_id} for user {user_email}")
+        else:
+            print(f"[KYC] ❌ Failed to delete KYC record {record_id}")
+            
+        return success
+        
+    except Exception as e:
+        print(f"[KYC] Error deleting record {record_id}: {e}")
+        return False
 
-async def create_customer_record(
-    db: AsyncSession, 
-    customer_data: Dict[str, Any],
-    created_by_user: Any
-) -> Dict[str, Any]:
-    """Create customer record manually (ERP Demo)"""
-    customer_id = create_customer_in_odoo(
-        customer_data.get("name", "Unknown Customer"),
-        customer_data.get("email")
-    )
-    
-    if customer_id:
+def get_user_kyc_stats(user_email: str) -> Dict[str, Any]:
+    """Get KYC processing statistics for a user"""
+    try:
+        records = get_user_kyc_records(user_email)
+        
+        total_records = len(records)
+        high_confidence = sum(1 for r in records if r.get('confidence_score', 0) > 0.8)
+        medium_confidence = sum(1 for r in records if 0.5 <= r.get('confidence_score', 0) <= 0.8)
+        low_confidence = sum(1 for r in records if r.get('confidence_score', 0) < 0.5)
+        
+        # Count by categories
+        onboarding_count = sum(1 for r in records if r.get('email_classification', {}).get('category') == 'Onboarding')
+        dispute_count = sum(1 for r in records if r.get('email_classification', {}).get('category') == 'Dispute')
+        other_count = sum(1 for r in records if r.get('email_classification', {}).get('category') == 'Other')
+        
         return {
-            "id": customer_id,
-            "name": customer_data.get("name", "Unknown Customer"),
-            "email": customer_data.get("email"),
-            "status": "created",
-            "odoo_id": customer_id,
-            "created_at": datetime.utcnow().isoformat()
+            'total_records': total_records,
+            'confidence_breakdown': {
+                'high': high_confidence,
+                'medium': medium_confidence,
+                'low': low_confidence
+            },
+            'category_breakdown': {
+                'onboarding': onboarding_count,
+                'dispute': dispute_count,
+                'other': other_count
+            },
+            'last_processing': records[0].get('processing_timestamp') if records else None
         }
-    return {}
+        
+    except Exception as e:
+        print(f"[KYC] Error getting user stats: {e}")
+        return {}
+
+# =================== LEGACY FUNCTIONS (UPDATED TO USE NEW SYSTEM) ===================
 
 def create_kyc_record(
     customer_name: str,
@@ -245,60 +355,51 @@ def create_kyc_record(
     extraction_data: Dict[str, Any],
     user: Dict[str, Any] | None = None
 ) -> Dict[str, Any]:
-    """
-    Create KYC verification ticket in Odoo.
-    UPDATED: Searches for existing customer instead of creating a new one.
-    """
-    print(f"[ERP] Starting KYC record creation for: {customer_name} ({customer_email})")
+    """Create KYC customer record using new custom data management system"""
+    print(f"[ERP] Starting KYC record creation for: {customer_name}")
     
-    # 1. FIND existing customer by email (from Signup)
-    customer_id = find_customer_by_email(customer_email)
-    
+    # Create basic contact in Odoo
+    customer_id = create_customer_in_odoo(customer_name, customer_email)
     if not customer_id:
-        # Fallback: If not found by email (rare if signed up), try searching by name
-        print(f"[ERP] Attempting fallback search by name: {customer_name}")
-        domain = [['name', '=', customer_name]]
-        records = _odoo_client.search_records('res.partner', domain=domain, fields=['id'])
-        if records:
-            customer_id = records[0]['id']
-            print(f"[ERP] Found customer by name. ID: {customer_id}")
-        else:
-            print(f"[ERP] ❌ Customer not found in Odoo. Skipping ticket creation to avoid 'Unknown Customer' duplicates.")
-            return {
-                "customer_id": None,
-                "ticket_id": None,
-                "name": customer_name,
-                "email": customer_email,
-                "status": "skipped",
-                "error": "Customer not found in Odoo (User must signup first)"
-            }
+        print(f"[ERP] ❌ Failed to create customer: {customer_name}")
+        return {
+            "customer_id": None,
+            "ticket_id": None,
+            "name": customer_name,
+            "email": customer_email,
+            "status": "failed",
+            "error": "Customer creation failed"
+        }
     
-    # 2. Create support ticket linked to the FOUND customer ID
-    subject = f"KYC Verification Request - {customer_name}"
-    description = f"""KYC Verification Request
+    # Prepare email classification data
+    email_data = {
+        "customer_name": customer_name,
+        "category": extraction_data.get("email_category", "Other"),
+        "confidence": extraction_data.get("confidence", 0.8),
+        "processing_method": extraction_data.get("processing_method", "AI Automation"),
+        "document_types": document_types
+    }
     
-Customer: {customer_name}
-Email: {customer_email}
-Document Types: {', '.join(document_types) if document_types else 'Email Only'}
-AI Confidence Score: {extraction_data.get('confidence', 0.0):.2f}
-Processing Method: {extraction_data.get('processing_method', 'AI Automation')}
-
-This ticket was automatically created by the AI KYC processing system.
-"""
-    
-    # Pass the ID, not the name
-    ticket_id = create_support_ticket_in_odoo(customer_id, subject, description)
+    # Create KYC processing record using our new system
+    user_email = user.get("email") if user else "system@demo.com"
+    processing_record_id = create_kyc_processing_record(
+        customer_id=customer_id,
+        user_email=user_email,
+        email_data=email_data,
+        document_data=extraction_data.get("document_analysis"),
+        tamper_data=extraction_data.get("tamper_detection")
+    )
     
     result = {
         "customer_id": customer_id,
-        "ticket_id": ticket_id,
+        "ticket_id": processing_record_id,  # Using processing record as "ticket"
         "name": customer_name,
         "email": customer_email,
         "status": "pending" if extraction_data.get("confidence", 0) < 0.9 else "verified",
         "document_types": ", ".join(document_types) if document_types else "Email Only",
         "confidence_score": extraction_data.get("confidence", 0.0),
         "processing_date": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
-        "processed_by": user.get("email") if user else "system"
+        "processed_by": user_email
     }
     
     print(f"[ERP] KYC record creation completed: {result}")
@@ -310,15 +411,24 @@ def sync_to_erp(
     currency: str,
     user: dict[str, Any] | None,
 ):
-    """Create customer and sales opportunity in Odoo (ERP Demo)"""
+    """Create customer and sales opportunity in Odoo"""
     try:
         print(f"[ERP] Starting ERP sync for: {customer_name}")
         
-        # For ERP Demo, we still create customer as it's a standalone feature
+        # Create customer
         customer_id = create_customer_in_odoo(customer_name)
         
-        opportunity_name = f"Sales Opportunity - {customer_name} ({currency} {order_amount})"
-        lead_id = create_sales_lead_in_odoo(customer_name, opportunity_name, order_amount)
+        # Create sales opportunity (standard CRM lead)
+        opportunity_data = {
+            'name': f"Sales Opportunity - {customer_name} ({currency} {order_amount})",
+            'partner_id': customer_id,
+            'expected_revenue': order_amount,
+            'type': 'lead',  # Distinguish from KYC records
+            'email_from': user.get("email") if user else "system@demo.com",
+            'description': f"Sales opportunity created via ERP sync\nAmount: {currency} {order_amount}"
+        }
+        
+        lead_id = _odoo_client.create_record('crm.lead', opportunity_data)
         
         record_id = f"ODOO-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
         
@@ -335,11 +445,49 @@ def sync_to_erp(
                 "currency": currency
             }
         }
+        
+        print(f"[ERP] ERP sync completed: {result}")
         return result
         
     except Exception as e:
-        return {
+        error_result = {
             "record_id": f"ERROR-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
             "status": "Error",
+            "synced": False,
+            "timestamp": datetime.utcnow(),
             "error": str(e)
         }
+        print(f"[ERP] ERP sync failed: {error_result}")
+        return error_result
+
+# =================== LEGACY HELPER FUNCTIONS ===================
+
+async def get_customer_records(db: AsyncSession) -> List[Dict[str, Any]]:
+    """Get customer records from Odoo"""
+    records = _odoo_client.search_records('res.partner', 
+        domain=[], 
+        fields=['name', 'email', 'create_date']
+    )
+    return records
+
+async def create_customer_record(
+    db: AsyncSession, 
+    customer_data: Dict[str, Any],
+    created_by_user: Any
+) -> Dict[str, Any]:
+    """Create customer record in Odoo"""
+    customer_id = create_customer_in_odoo(
+        customer_data.get("name", "Unknown Customer"),
+        customer_data.get("email")
+    )
+    
+    if customer_id:
+        return {
+            "id": customer_id,
+            "name": customer_data.get("name", "Unknown Customer"),
+            "email": customer_data.get("email"),
+            "status": "created",
+            "odoo_id": customer_id,
+            "created_at": datetime.utcnow().isoformat()
+        }
+    return {}

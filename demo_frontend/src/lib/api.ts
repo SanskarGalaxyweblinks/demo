@@ -80,7 +80,93 @@ export interface CreateCustomerRequest {
   verification_status?: string;
 }
 
-// NEW: ERP Sync Types
+// NEW: KYC Data Management Types
+export interface KYCRecord {
+  id: number;
+  customer_name: string;
+  customer_email: string;
+  odoo_customer_id?: number;
+  email_classification?: {
+    category: string;
+    priority: string;
+    sentiment: string;
+    confidence: number;
+    tags: string[];
+    reasoning: string;
+  };
+  document_analysis?: {
+    document_type: string;
+    confidence: number;
+    entities: string[];
+    extracted_data?: any;
+  };
+  tamper_detection?: {
+    is_authentic: boolean;
+    risk_level: string;
+    confidence_score: number;
+    detected_issues: string[];
+  };
+  confidence_score: number;
+  processing_timestamp: string;
+  processed_by: string;
+  created_date: string;
+  status: string;
+}
+
+export interface UserKYCStats {
+  total_records: number;
+  confidence_breakdown: {
+    high: number;
+    medium: number;
+    low: number;
+  };
+  category_breakdown: {
+    onboarding: number;
+    dispute: number;
+    other: number;
+  };
+  last_processing?: string;
+}
+
+export interface KYCDataResponse {
+  records: KYCRecord[];
+  total_count: number;
+  user_stats: UserKYCStats;
+}
+
+export interface KYCDeleteResponse {
+  success: boolean;
+  message: string;
+  deleted_record_id?: number;
+}
+
+export interface KYCDashboardData {
+  user_email: string;
+  overview_stats: UserKYCStats;
+  recent_records: Array<{
+    id: number;
+    customer_name: string;
+    email_category: string;
+    confidence_score: number;
+    processing_date: string;
+    status: string;
+    document_types: string[];
+  }>;
+  processing_trends: {
+    daily_volume: number;
+    weekly_growth: string;
+    accuracy_trend: string;
+    avg_processing_time: string;
+  };
+  system_health: {
+    odoo_connection: string;
+    ai_services: string;
+    processing_queue: string;
+    last_backup: string;
+  };
+}
+
+// ERP Sync Types
 export interface ErpSyncRequest {
   customerName: string;
   orderAmount: number;
@@ -122,10 +208,10 @@ export interface KYCWorkflowResponse {
 }
 
 // Utility function for making authenticated requests
-async function fetchWithAuth(url: string, options: RequestInit = {}, token?: string) {
-  const headers = {
+async function fetchWithAuth(url: string, options: RequestInit = {}, token?: string): Promise<any> {
+  const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    ...options.headers,
+    ...(options.headers as Record<string, string>),
   };
 
   if (token) {
@@ -242,7 +328,7 @@ export const documentAPI = {
 
 // ERP/Customer Management API
 export const erpAPI = {
-  // NEW: Odoo ERP Sync
+  // Odoo ERP Sync
   async syncToErp(data: ErpSyncRequest, token?: string): Promise<ErpSyncResponse> {
     return fetchWithAuth("/erp/sync", {
       method: "POST",
@@ -278,6 +364,7 @@ export const erpAPI = {
   async getStats(token?: string): Promise<{
     total_customers: number;
     recent_customers?: number;
+    user_kyc_records?: number;
     odoo_connection?: string;
     last_sync?: string;
     error?: string;
@@ -287,11 +374,12 @@ export const erpAPI = {
     }, token);
   },
 
-  // NEW: ERP Health Check
+  // ERP Health Check
   async healthCheck(): Promise<{
     status: string;
     odoo_connection: string;
     database?: string;
+    kyc_data_management?: string;
     message: string;
     error?: string;
   }> {
@@ -300,7 +388,7 @@ export const erpAPI = {
     });
   },
 
-  // NEW: KYC Record Creation in Odoo
+  // KYC Record Creation in Odoo (Legacy)
   async createKycRecord(data: {
     customer_name: string;
     customer_email: string;
@@ -310,6 +398,55 @@ export const erpAPI = {
     return fetchWithAuth("/erp/kyc", {
       method: "POST",
       body: JSON.stringify(data),
+    }, token);
+  },
+
+  // =================== NEW KYC DATA MANAGEMENT API ===================
+
+  // Get user's KYC processing records
+  async getKYCRecords(options: {
+    limit?: number;
+    offset?: number;
+  } = {}, token?: string): Promise<KYCDataResponse> {
+    const params = new URLSearchParams();
+    if (options.limit) params.append('limit', options.limit.toString());
+    if (options.offset) params.append('offset', options.offset.toString());
+
+    const url = `/erp/kyc/records${params.toString() ? `?${params.toString()}` : ''}`;
+    return fetchWithAuth(url, { method: "GET" }, token);
+  },
+
+  // Delete a specific KYC record
+  async deleteKYCRecord(recordId: number, token?: string): Promise<KYCDeleteResponse> {
+    return fetchWithAuth(`/erp/kyc/records/${recordId}`, {
+      method: "DELETE",
+    }, token);
+  },
+
+  // Get user's KYC processing statistics
+  async getKYCStats(token?: string): Promise<UserKYCStats> {
+    return fetchWithAuth("/erp/kyc/stats", {
+      method: "GET",
+    }, token);
+  },
+
+  // Get complete KYC dashboard data
+  async getKYCDashboard(token?: string): Promise<KYCDashboardData> {
+    return fetchWithAuth("/erp/kyc/dashboard", {
+      method: "GET",
+    }, token);
+  },
+
+  // Bulk delete multiple KYC records
+  async bulkDeleteKYCRecords(recordIds: number[], token?: string): Promise<{
+    success: boolean;
+    deleted_records: number[];
+    failed_records: number[];
+    message: string;
+  }> {
+    return fetchWithAuth("/erp/kyc/bulk-delete", {
+      method: "POST",
+      body: JSON.stringify({ record_ids: recordIds }),
     }, token);
   },
 };
@@ -386,6 +523,110 @@ export const kycWorkflowAPI = {
   },
 };
 
+// =================== NEW KYC DATA MANAGEMENT UTILITIES ===================
+
+// Convenience functions for KYC data management
+export const kycDataAPI = {
+  // Get user's KYC records with pagination
+  async getUserRecords(page: number = 1, pageSize: number = 10, token?: string): Promise<KYCDataResponse> {
+    const offset = (page - 1) * pageSize;
+    return erpAPI.getKYCRecords({ limit: pageSize, offset }, token);
+  },
+
+  // Get recent KYC records (last 10)
+  async getRecentRecords(token?: string): Promise<KYCRecord[]> {
+    const response = await erpAPI.getKYCRecords({ limit: 10, offset: 0 }, token);
+    return response.records;
+  },
+
+  // Search KYC records by customer name (client-side filtering)
+  async searchRecords(searchTerm: string, token?: string): Promise<KYCRecord[]> {
+    const response = await erpAPI.getKYCRecords({ limit: 100 }, token);
+    return response.records.filter(record => 
+      record.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      record.customer_email.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  },
+
+  // Get records by status
+  async getRecordsByStatus(status: string, token?: string): Promise<KYCRecord[]> {
+    const response = await erpAPI.getKYCRecords({ limit: 100 }, token);
+    return response.records.filter(record => record.status.toLowerCase() === status.toLowerCase());
+  },
+
+  // Get high confidence records (confidence > 80%)
+  async getHighConfidenceRecords(token?: string): Promise<KYCRecord[]> {
+    const response = await erpAPI.getKYCRecords({ limit: 100 }, token);
+    return response.records.filter(record => record.confidence_score > 0.8);
+  },
+
+  // Delete multiple records with confirmation
+  async deleteRecordsWithConfirmation(recordIds: number[], token?: string): Promise<{
+    success: boolean;
+    message: string;
+    details: any;
+  }> {
+    try {
+      const result = await erpAPI.bulkDeleteKYCRecords(recordIds, token);
+      return {
+        success: result.success,
+        message: result.message,
+        details: result
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Delete operation failed',
+        details: { error }
+      };
+    }
+  },
+
+  // Export KYC data to CSV format (client-side)
+  exportToCSV(records: KYCRecord[]): string {
+    const headers = [
+      'ID', 'Customer Name', 'Email', 'Status', 'Category', 'Confidence Score',
+      'Processing Date', 'Document Type', 'Risk Level', 'Processed By'
+    ];
+
+    const csvData = records.map(record => [
+      record.id,
+      record.customer_name,
+      record.customer_email,
+      record.status,
+      record.email_classification?.category || 'N/A',
+      record.confidence_score,
+      record.processing_timestamp,
+      record.document_analysis?.document_type || 'N/A',
+      record.tamper_detection?.risk_level || 'N/A',
+      record.processed_by
+    ]);
+
+    const csvContent = [headers, ...csvData]
+      .map(row => row.map(field => `"${field}"`).join(','))
+      .join('\n');
+
+    return csvContent;
+  },
+
+  // Download CSV file
+  downloadCSV(records: KYCRecord[], filename: string = 'kyc-records.csv'): void {
+    const csvContent = this.exportToCSV(records);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', filename);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  }
+};
+
 // Health check
 export const healthAPI = {
   async check(): Promise<{ message: string }> {
@@ -412,5 +653,6 @@ export default {
   document: documentAPI,
   erp: erpAPI,
   kycWorkflow: kycWorkflowAPI,
+  kycData: kycDataAPI,
   health: healthAPI,
 };

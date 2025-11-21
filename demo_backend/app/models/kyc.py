@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from fastapi import UploadFile
+from datetime import datetime
 
 class KYCWorkflowRequest(BaseModel):
     """Request model for complete KYC workflow processing"""
@@ -35,7 +36,6 @@ class DocumentExtractionResult(BaseModel):
     extracted_data: Optional[Dict[str, Any]] = Field(alias="extractedData", description="Structured extracted data")
     processing_time: float = Field(alias="processingTime", description="Processing duration")
 
-    # ADD THIS CONFIG BLOCK
     class Config:
         populate_by_name = True
 
@@ -48,7 +48,6 @@ class TamperDetectionResult(BaseModel):
     analysis_details: Dict[str, bool] = Field(alias="analysisDetails", description="Detailed analysis breakdown")
     processing_time: float = Field(alias="processingTime", description="Processing duration")
 
-    # ADD THIS CONFIG BLOCK
     class Config:
         populate_by_name = True
 
@@ -58,7 +57,6 @@ class ERPIntegrationResult(BaseModel):
     status: str = Field(description="Integration status")
     message: str = Field(description="Status message")
 
-    # ADD THIS CONFIG BLOCK
     class Config:
         populate_by_name = True
 
@@ -72,56 +70,96 @@ class KYCWorkflowResponse(BaseModel):
     
     class Config:
         populate_by_name = True
-        json_schema_extra = {
-            "example": {
-                "emailClassification": {
-                    "category": "Onboarding",
-                    "priority": "High",
-                    "sentiment": "Positive",
-                    "confidence": 0.94,
-                    "tags": ["kyc_request", "documents_attached", "new_customer"],
-                    "reasoning": "Email contains clear onboarding intent with document attachments"
-                },
-                "documentAnalysis": {
-                    "documentType": "ID_Document",
-                    "pageCount": 1,
-                    "entities": ["Name: John Smith", "DOB: 1985-03-15", "Document: Driver License"],
-                    "detectedCurrency": None,
-                    "confidence": 0.91,
-                    "receivedAt": "2024-11-20 10:30:00",
-                    "preview": "Driver License - State of California...",
-                    "extractedData": {
-                        "fullName": "John Smith",
-                        "dateOfBirth": "1985-03-15",
-                        "documentNumber": "DL123456789",
-                        "documentType": "Driver License",
-                        "issuingAuthority": "California DMV"
-                    },
-                    "processingTime": 2.1
-                },
-                "tamperDetection": {
-                    "isAuthentic": True,
-                    "confidenceScore": 0.96,
-                    "detectedIssues": [],
-                    "riskLevel": "Low",
-                    "analysisDetails": {
-                        "metadataConsistency": True,
-                        "pixelAnalysis": True,
-                        "compressionArtifacts": True,
-                        "editingTraces": False
-                    },
-                    "processingTime": 1.8
-                },
-                "erpIntegration": {
-                    "customerId": "KYC789",
-                    "status": "Success",
-                    "message": "Customer record created successfully"
-                },
-                "processingTime": 6.5
-            }
-        }
 
-# Groq API specific models for prompt engineering
+# =================== NEW CUSTOM ODOO STORAGE MODELS ===================
+
+class KYCProcessingRecord(BaseModel):
+    """Model for KYC processing records stored in Odoo"""
+    id: int = Field(description="Odoo record ID")
+    customer_name: str = Field(description="Customer name from processing")
+    customer_email: str = Field(description="Customer email")
+    odoo_customer_id: Optional[int] = Field(description="Related Odoo customer ID")
+    email_classification: Optional[Dict[str, Any]] = Field(description="Email classification results")
+    document_analysis: Optional[Dict[str, Any]] = Field(description="Document analysis results")
+    tamper_detection: Optional[Dict[str, Any]] = Field(description="Tamper detection results")
+    confidence_score: float = Field(ge=0.0, le=1.0, description="Overall processing confidence")
+    processing_timestamp: str = Field(description="When the processing occurred")
+    processed_by: str = Field(description="User who initiated the processing")
+    created_date: str = Field(description="When the record was created in Odoo")
+    status: str = Field(default="pending", description="Processing status: pending, verified, flagged")
+
+class KYCRecordSummary(BaseModel):
+    """Summary model for KYC record display"""
+    id: int = Field(description="Record ID")
+    customer_name: str = Field(description="Customer name")
+    email_category: str = Field(description="Email classification category")
+    confidence_score: float = Field(description="Processing confidence")
+    processing_date: str = Field(description="Processing date")
+    status: str = Field(description="Current status")
+    document_types: List[str] = Field(default_factory=list, description="Types of documents processed")
+
+class UserKYCStats(BaseModel):
+    """Statistics for user's KYC processing history"""
+    total_records: int = Field(description="Total number of processed records")
+    confidence_breakdown: Dict[str, int] = Field(description="Confidence level breakdown")
+    category_breakdown: Dict[str, int] = Field(description="Email category breakdown")
+    last_processing: Optional[str] = Field(description="Last processing timestamp")
+    recent_activity: List[KYCRecordSummary] = Field(default_factory=list, description="Recent processing activities")
+
+class KYCDataRequest(BaseModel):
+    """Request model for KYC data operations"""
+    user_email: str = Field(description="User's email for data filtering")
+    record_id: Optional[int] = Field(description="Specific record ID for operations", default=None)
+    limit: int = Field(default=50, ge=1, le=100, description="Maximum number of records to return")
+    offset: int = Field(default=0, ge=0, description="Number of records to skip")
+
+class KYCDataResponse(BaseModel):
+    """Response model for KYC data retrieval"""
+    records: List[KYCProcessingRecord] = Field(description="List of KYC processing records")
+    total_count: int = Field(description="Total number of records available")
+    user_stats: UserKYCStats = Field(description="User's processing statistics")
+
+class KYCDeleteRequest(BaseModel):
+    """Request model for deleting KYC records"""
+    record_id: int = Field(description="ID of the record to delete")
+    user_email: str = Field(description="Email of the user requesting deletion")
+
+class KYCDeleteResponse(BaseModel):
+    """Response model for KYC record deletion"""
+    success: bool = Field(description="Whether the deletion was successful")
+    message: str = Field(description="Status message")
+    deleted_record_id: Optional[int] = Field(description="ID of the deleted record")
+
+# =================== ODOO INTEGRATION MODELS ===================
+
+class OdooCustomerData(BaseModel):
+    """Model for customer data stored in Odoo"""
+    odoo_id: int = Field(description="Odoo partner ID")
+    name: str = Field(description="Customer name")
+    email: Optional[str] = Field(description="Customer email")
+    created_date: str = Field(description="Creation date in Odoo")
+
+class OdooKYCProcessingData(BaseModel):
+    """Model for KYC processing data stored in Odoo CRM leads"""
+    lead_id: int = Field(description="Odoo CRM lead ID")
+    customer_id: int = Field(description="Related customer ID")
+    processing_summary: Dict[str, Any] = Field(description="Complete AI processing results")
+    confidence_score: float = Field(description="Overall confidence score")
+    processed_by: str = Field(description="User who processed the request")
+    created_date: str = Field(description="Record creation date")
+
+class ERP7DataModel(BaseModel):
+    """Extended model for ERP-7 like data structure"""
+    kyc_id: str = Field(description="Unique KYC processing identifier")
+    customer_reference: str = Field(description="Customer reference number")
+    processing_pipeline: List[str] = Field(description="Steps in the processing pipeline")
+    ai_models_used: List[str] = Field(description="AI models involved in processing")
+    risk_assessment: Dict[str, Any] = Field(description="Comprehensive risk assessment")
+    compliance_flags: List[str] = Field(default_factory=list, description="Compliance-related flags")
+    audit_trail: List[Dict[str, Any]] = Field(description="Complete audit trail of operations")
+
+# =================== EXISTING GROQ API MODELS ===================
+
 class GroqEmailPrompt(BaseModel):
     """Structured prompt for Groq email classification"""
     system_message: str
@@ -135,7 +173,6 @@ class GroqDocumentPrompt(BaseModel):
     document_text: str
     expected_format: str
 
-# Response validation models for Groq API
 class GroqEmailResponse(BaseModel):
     """Expected response format from Groq API for email classification"""
     category: str = Field(description="Must be one of: Onboarding, Dispute, Other")
@@ -152,3 +189,21 @@ class GroqDocumentResponse(BaseModel):
     structured_data: Dict[str, Any] = Field(description="Structured extracted data")
     confidence: float = Field(ge=0.0, le=1.0)
     summary: str = Field(description="Brief summary of document content")
+
+# =================== DASHBOARD & ANALYTICS MODELS ===================
+
+class KYCDashboardData(BaseModel):
+    """Complete dashboard data for KYC management"""
+    user_email: str = Field(description="User's email")
+    overview_stats: UserKYCStats = Field(description="Overview statistics")
+    recent_records: List[KYCRecordSummary] = Field(description="Recent processing records")
+    processing_trends: Dict[str, Any] = Field(description="Processing trends and patterns")
+    system_health: Dict[str, Any] = Field(description="System health indicators")
+
+class KYCAnalytics(BaseModel):
+    """Analytics model for KYC processing insights"""
+    processing_volume: Dict[str, int] = Field(description="Processing volume by time period")
+    accuracy_metrics: Dict[str, float] = Field(description="Accuracy and confidence metrics")
+    category_distribution: Dict[str, int] = Field(description="Distribution of email categories")
+    document_type_breakdown: Dict[str, int] = Field(description="Types of documents processed")
+    risk_assessment_summary: Dict[str, int] = Field(description="Risk level distribution")
