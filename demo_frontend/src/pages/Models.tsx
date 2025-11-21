@@ -102,7 +102,7 @@ const Models = () => {
             <p className="text-muted-foreground">End-to-end automation pipeline</p>
           </div>
           
-          <Card className="group border-border/50 bg-card/80 backdrop-blur-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-2 max-w-4xl mx-auto border-primary/20">
+          <Card className="group border-border/50 bg-card/80 backdrop-blur-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-2 max-w-4xl mx-auto">
             <CardHeader className="text-center">
               <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary to-[hsl(195,100%,45%)] flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
                 <Mail className="w-10 h-10 text-white" />

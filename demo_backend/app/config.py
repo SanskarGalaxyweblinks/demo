@@ -82,6 +82,7 @@ class Settings(BaseModel):
                 "http://localhost:8080",
                 "http://127.0.0.1:8080",
                 "http://localhost:3000",
+                "http://192.168.0.175:8080"
             ]
             if os.getenv("FRONTEND_ORIGIN") is None
             else [o.strip() for o in os.getenv("FRONTEND_ORIGIN", "").split(",") if o.strip()]
